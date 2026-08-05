@@ -24,11 +24,18 @@ class GraphSAGE(nn.Module):
     ##################################################
 
     def __init__(
+
             self,
+
             input_dim=6,
+
             hidden_dim=128,
+
             embedding_dim=128,
-            dropout=0.20):
+
+            dropout=0.20
+
+    ):
 
         super(GraphSAGE, self).__init__()
 
@@ -37,8 +44,11 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         self.input_dim = input_dim
+
         self.hidden_dim = hidden_dim
+
         self.embedding_dim = embedding_dim
+
         self.dropout = dropout
 
         ##################################################
@@ -46,18 +56,27 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         self.conv1 = SAGEConv(
+
             input_dim,
+
             hidden_dim
+
         )
 
         self.conv2 = SAGEConv(
+
             hidden_dim,
+
             hidden_dim
+
         )
 
         self.conv3 = SAGEConv(
+
             hidden_dim,
+
             embedding_dim
+
         )
 
         ##################################################
@@ -65,15 +84,21 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         self.bn1 = nn.BatchNorm1d(
+
             hidden_dim
+
         )
 
         self.bn2 = nn.BatchNorm1d(
+
             hidden_dim
+
         )
 
         self.bn3 = nn.BatchNorm1d(
+
             embedding_dim
+
         )
 
         ##################################################
@@ -81,7 +106,9 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         self.drop = nn.Dropout(
+
             p=dropout
+
         )
 
         ##################################################
@@ -91,20 +118,88 @@ class GraphSAGE(nn.Module):
         self.graph_head = nn.Sequential(
 
             nn.Linear(
+
                 embedding_dim,
+
                 embedding_dim
+
             ),
 
             nn.ReLU(),
 
             nn.Dropout(
+
                 dropout
+
             ),
 
             nn.Linear(
+
                 embedding_dim,
+
                 embedding_dim
+
             )
+
+        )
+
+    ##################################################
+    # Pretrained GraphSAGE Weights
+    ##################################################
+
+    PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth"
+
+    ##################################################
+    # Load Pretrained GraphSAGE
+    ##################################################
+
+    def load_pretrained(
+
+            self,
+
+            device="cpu"
+
+    ):
+
+        ##################################################
+        # Load Weights
+        ##################################################
+
+        checkpoint = torch.load(
+
+            PRETRAINED_GNN_PATH,
+
+            map_location=device
+
+        )
+
+        ##################################################
+        # Restore Parameters
+        ##################################################
+
+        self.load_state_dict(
+
+            checkpoint
+
+        )
+
+        ##################################################
+        # Evaluation Mode
+        ##################################################
+
+        self.eval()
+
+        ##################################################
+        # Freeze Parameters
+        ##################################################
+
+        for parameter in self.parameters():
+
+            parameter.requires_grad = False
+
+        print(
+
+            "\nPretrained GraphSAGE loaded successfully."
 
         )
 
@@ -112,7 +207,13 @@ class GraphSAGE(nn.Module):
     # Forward
     ##################################################
 
-    def forward(self, data):
+    def forward(
+
+            self,
+
+            data
+
+    ):
 
         ##################################################
         # Inputs
@@ -129,8 +230,11 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         x = self.conv1(
+
             x,
+
             edge_index
+
         )
 
         x = self.bn1(x)
@@ -144,8 +248,11 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         x = self.conv2(
+
             x,
+
             edge_index
+
         )
 
         x = self.bn2(x)
@@ -159,8 +266,11 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         x = self.conv3(
+
             x,
+
             edge_index
+
         )
 
         x = self.bn3(x)
@@ -180,7 +290,7 @@ class GraphSAGE(nn.Module):
         )
 
         ##################################################
-        # Graph Head
+        # Graph Embedding Head
         ##################################################
 
         graph_embedding = self.graph_head(
@@ -202,5 +312,9 @@ class GraphSAGE(nn.Module):
             dim=1
 
         )
+
+        ##################################################
+        # Return Graph Embedding
+        ##################################################
 
         return graph_embedding
