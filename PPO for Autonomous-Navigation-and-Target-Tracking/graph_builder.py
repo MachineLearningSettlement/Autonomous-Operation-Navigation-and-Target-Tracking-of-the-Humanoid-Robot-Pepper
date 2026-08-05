@@ -83,7 +83,6 @@ def encode_node(node_type, node):
 
         ]
 
-
     elif node_type == "goal":
 
         feature = [
@@ -101,7 +100,6 @@ def encode_node(node_type, node):
             1.0
 
         ]
-
 
     elif node_type == "obstacle":
 
@@ -121,7 +119,6 @@ def encode_node(node_type, node):
 
         ]
 
-
     elif node_type == "human":
 
         feature = [
@@ -140,7 +137,6 @@ def encode_node(node_type, node):
 
         ]
 
-
     else:
 
         raise ValueError(
@@ -148,7 +144,6 @@ def encode_node(node_type, node):
             "Unknown node type"
 
         )
-
 
     return feature
 
@@ -330,7 +325,7 @@ def build_graph(
 
     edge_attr.append([d])
 
-        ##################################################
+    ##################################################
     # Robot <-> Obstacles
     ##################################################
 
