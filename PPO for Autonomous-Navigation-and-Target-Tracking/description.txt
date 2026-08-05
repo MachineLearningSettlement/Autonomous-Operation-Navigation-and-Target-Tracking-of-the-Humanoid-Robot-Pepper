@@ -8,6 +8,10 @@ alternative trajectories. The result is a more reliable, data-efficient, and unc
 
 
 
+***Phase 2 is currently under submission to the International Conference on Robotics, Automation, and Artificial Intelligence 2026 (RAAI) that will be organized in Singapore***
+
+
+
 ***RESULTS***:
 
 Five reinforcement learning approaches were compared: NNN-PPO (standard PPO), BNN-PPO (PPO with Bayesian Neural Networks), MCD-PPO (PPO with Monte Carlo Dropout), BNN-CTAL-PPO (Bayesian PPO enhanced with Counterfactual Trajectory Active Learning), and MCD-CTAL-PPO (Monte Carlo Dropout PPO enhanced with CTAL). These methods were benchmarked under identical training and testing conditions to assess the contribution of uncertainty estimation and active learning to autonomous robot navigation.
