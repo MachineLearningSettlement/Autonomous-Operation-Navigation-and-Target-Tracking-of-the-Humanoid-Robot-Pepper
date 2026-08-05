@@ -7,6 +7,7 @@
 import copy
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torch.optim as optim
 import numpy as np
 
@@ -145,7 +146,9 @@ class PPO:
 
             epochs=5,
 
-            batch_size=64
+            batch_size=64,
+
+            threshold_C=0.1
 
     ):
 
@@ -166,6 +169,8 @@ class PPO:
         self.epochs = epochs
 
         self.batch_size = batch_size
+
+        self.C = threshold_C
 
         ##################################################
         # Networks
