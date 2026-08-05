@@ -35,9 +35,9 @@ LAMBDA = 0.95
 
 THRESHOLD = 0.15
 
-M = 8
+M = 10
 
-K = 8
+K = 100
 
 SAVE_PATH = "./weights/"
 
