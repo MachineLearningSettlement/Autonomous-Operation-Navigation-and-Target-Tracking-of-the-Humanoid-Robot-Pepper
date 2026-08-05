@@ -1,1 +1,11 @@
+Phase 1 focuses on enhancing Pepper's cognitive capabilities, enabling the robot to perceive, understand, and interpret 
 
+its surrounding environment while learning to interact naturally with both humans and objects. During this phase, the emphasis 
+
+is placed on developing high-level perception and interaction functionalities, including face recognition, object recognition, 
+
+object grasping, and human–robot dialogue. To achieve these objectives, the system integrates Large Language Models (LLMs), 
+
+Knowledge Graphs, Deep Learning, and Control Theory, providing the necessary foundations for intelligent perception, reasoning, 
+
+decision-making, and interaction before addressing autonomous navigation in the subsequent phase.
