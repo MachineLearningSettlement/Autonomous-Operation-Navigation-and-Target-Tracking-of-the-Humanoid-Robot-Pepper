@@ -4,12 +4,12 @@ from naoqi import ALProxy
 import sys
 
 # Adresse IP et port de Pepper
-ip = "10.12.20.165"
-port = 9559
-#stop_event = threading.Event()  # Événement global pour arrêter le discours
+ip = Pepper_API
+port = Pepper_PORT
+#stop_event = threading.Event()  # Ã‰vÃ©nement global pour arrÃªter le discours
 old_response = ''
 var = 0
-# Connexion au proxy de Pepper pour la synthèse vocale
+# Connexion au proxy de Pepper pour la synthÃ¨se vocale
 try:
     tts = ALProxy("ALTextToSpeech", ip, port)
     print("Connected to Pepper successfully!")
@@ -27,7 +27,7 @@ def read_from_file(filename):
         return None
 
 def synthesize_speech(text):
-    """Fait parler Pepper avec le texte donné et affiche 'je parle'."""
+    """Fait parler Pepper avec le texte donnÃ© et affiche 'je parle'."""
     try:
         print("Pepper says:", text)
         tts.post.say(text)  # Lancement du texte en mode asynchrone
@@ -35,7 +35,7 @@ def synthesize_speech(text):
         estimated_speech_time = max(1, len(text.split()) / 2.5)  # ~2.5 mots/sec
         start_time = time.time()
 
-        while time.time() - start_time < estimated_speech_time :  # Attente du temps estimé 
+        while time.time() - start_time < estimated_speech_time :  # Attente du temps estimÃ© 
             new_response = read_from_file('pepper_response.txt')
             
             if new_response :
@@ -72,7 +72,7 @@ def capture_image(ip, port):
         #txt_pres = file.read()
         
     try:
-        # Créer un proxy pour le service ALMotion
+        # CrÃ©er un proxy pour le service ALMotion
         motion_proxy = ALProxy("ALMotion", ip, port)
 
         #if txt_cam == 'Oui' :
@@ -83,26 +83,26 @@ def capture_image(ip, port):
             # Set the head position before capturing the image
             #set_head_position_pres(motion_proxy, , )   
 
-        # Créer un proxy pour le service ALVideoDevice
+        # CrÃ©er un proxy pour le service ALVideoDevice
         video_proxy = ALProxy("ALVideoDevice", ip, port)
 
-        # Configuration de la caméra
+        # Configuration de la camÃ©ra
         resolution = 2  # kVGA (640x480) pour l'image RGB
         color_space = 11  # RGB pour l'image couleur
         fps = 10
 
-        # Configuration de la caméra de profondeur
-        depth_resolution = 2  # Résolution pour l'image de profondeur
-        depth_color_space = 16  # Espace colorimétrique pour la profondeur (depuis la caméra ToF ou le capteur de profondeur)
+        # Configuration de la camÃ©ra de profondeur
+        depth_resolution = 2  # RÃ©solution pour l'image de profondeur
+        depth_color_space = 16  # Espace colorimÃ©trique pour la profondeur (depuis la camÃ©ra ToF ou le capteur de profondeur)
 
-        # Nom de la caméra (peut être "CameraTop" ou "CameraBottom")
-        camera_name_rgb = "CameraTop"  # Caméra RGB
-        camera_name_depth = "DepthCamera"  # Nom pour la caméra de profondeur
+        # Nom de la camÃ©ra (peut Ãªtre "CameraTop" ou "CameraBottom")
+        camera_name_rgb = "CameraTop"  # CamÃ©ra RGB
+        camera_name_depth = "DepthCamera"  # Nom pour la camÃ©ra de profondeur
 
-        # S'inscrire à la caméra RGB
+        # S'inscrire Ã  la camÃ©ra RGB
         video_client_rgb = video_proxy.subscribeCamera(camera_name_rgb, 0, resolution, color_space, fps)
 
-        # S'inscrire à la caméra de profondeur
+        # S'inscrire Ã  la camÃ©ra de profondeur
         video_client_depth = video_proxy.subscribeCamera(camera_name_depth, 0, depth_resolution, depth_color_space, fps)
 
         # Capturer une image RGB
@@ -110,16 +110,16 @@ def capture_image(ip, port):
         # Capturer une image de profondeur
         nao_image_depth = video_proxy.getImageRemote(video_client_depth)
 
-        # Désinscrire des caméras
+        # DÃ©sinscrire des camÃ©ras
         video_proxy.unsubscribe(video_client_rgb)
         video_proxy.unsubscribe(video_client_depth)
 
-        # Extraire les données de l'image RGB
+        # Extraire les donnÃ©es de l'image RGB
         image_width_rgb = nao_image_rgb[0]
         image_height_rgb = nao_image_rgb[1]
         image_array_rgb = nao_image_rgb[6]
 
-        # Extraire les données de l'image de profondeur
+        # Extraire les donnÃ©es de l'image de profondeur
         image_width_depth = nao_image_depth[0]
         image_height_depth = nao_image_depth[1]
         image_array_depth = nao_image_depth[6]
@@ -130,7 +130,7 @@ def capture_image(ip, port):
             f.write("P6\n{} {}\n255\n".format(image_width_rgb, image_height_rgb))
             f.write(image_array_rgb)
 
-        print("Image RGB enregistrée sous {}".format(rgb_filename))
+        print("Image RGB enregistrÃ©e sous {}".format(rgb_filename))
 
         # Enregistrer l'image de profondeur
         depth_filename = "pepper_depth_image.ppm"
@@ -138,7 +138,7 @@ def capture_image(ip, port):
             f.write("P5\n{} {}\n255\n".format(image_width_depth, image_height_depth))  # P5 pour image grayscale
             f.write(image_array_depth)
 
-        print("Image de profondeur enregistrée sous {}".format(depth_filename))
+        print("Image de profondeur enregistrÃ©e sous {}".format(depth_filename))
 
     except Exception as e:
         print("Erreur lors de la capture d'image : {}".format(e))
