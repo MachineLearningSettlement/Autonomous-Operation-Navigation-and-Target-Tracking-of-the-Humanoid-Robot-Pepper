@@ -8,6 +8,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth"
+
 from torch_geometric.nn import (
     SAGEConv,
     global_mean_pool
@@ -147,7 +149,7 @@ class GraphSAGE(nn.Module):
     # Pretrained GraphSAGE Weights
     ##################################################
 
-    PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth"
+    #(PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth")
 
     ##################################################
     # Load Pretrained GraphSAGE
