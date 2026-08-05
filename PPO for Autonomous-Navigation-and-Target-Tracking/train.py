@@ -5,15 +5,52 @@
 ##################################################
 
 import os
-import rospy
-import torch
+import random
 import numpy as np
+import torch
+import rospy
+
+##################################################
+# Project Modules
+##################################################
 
 from environment import PepperEnvironment
+from graph_builder import GraphBuilder
 from gnn import GraphSAGE
 from ppo import PPO
 from ctal import CTAL
 
+##################################################
+# Random Seed
+##################################################
+
+SEED = 42
+
+random.seed(SEED)
+
+np.random.seed(SEED)
+
+torch.manual_seed(SEED)
+
+if torch.cuda.is_available():
+
+    torch.cuda.manual_seed_all(SEED)
+
+##################################################
+# Device
+##################################################
+
+DEVICE = torch.device(
+
+    "cuda"
+
+    if torch.cuda.is_available()
+
+    else
+
+    "cpu"
+
+)
 
 ##################################################
 # Hyperparameters
@@ -27,8 +64,6 @@ EPISODES_PER_BATCH = 8
 
 PPO_EPOCHS = 4
 
-MAX_EPISODES = NUM_BATCHES * EPISODES_PER_BATCH
-
 GAMMA = 0.99
 
 LAMBDA = 0.95
@@ -39,67 +74,100 @@ M = 10
 
 K = 100
 
-SAVE_PATH = "./weights/"
+##################################################
+# Weights
+##################################################
 
+PRETRAINED_GNN_DIRECTORY = "./weights/pretrained_gnn.pth"
+
+PPO_WEIGHTS_DIRECTORY = "./weights/ppo"
+
+os.makedirs(
+
+    PPO_WEIGHTS_DIRECTORY,
+
+    exist_ok=True
+
+)
 
 ##################################################
 # ROS
 ##################################################
 
 rospy.init_node(
-    "ppo_training"
-)
 
+    "ppo_training"
+
+)
 
 ##################################################
 # Environment
 ##################################################
 
 env = PepperEnvironment(
+
     training=True
+
 )
 
+##################################################
+# Graph Builder
+##################################################
+
+graph_builder = GraphBuilder()
 
 ##################################################
-# GNN
+# Load Pretrained GNN
 ##################################################
 
-gnn = GraphSAGE()
+gnn = GraphSAGE().to(
 
+    DEVICE
+
+)
+
+gnn.load_pretrained(
+
+    PRETRAINED_GNN_DIRECTORY,
+
+    device=DEVICE
+
+)
 
 ##################################################
 # PPO
 ##################################################
 
 ppo = PPO(
-    graph_dim=128,
-    social_dim=2,
-    gamma=GAMMA,
-    lam=LAMBDA,
-    epochs=PPO_EPOCHS
-)
 
+    graph_dim=128,
+
+    social_dim=2,
+
+    gamma=GAMMA,
+
+    lam=LAMBDA,
+
+    epochs=PPO_EPOCHS
+
+)
 
 ##################################################
 # CTAL
 ##################################################
 
 ctal = CTAL(
+
     actor=ppo.actor,
+
     threshold=THRESHOLD,
+
     M=M,
+
     K=K
+
 )
 
-
-##################################################
-# Create Saving Folder
-##################################################
-
-os.makedirs(
-    SAVE_PATH,
-    exist_ok=True
-)
 
 ##################################################
 # Training
@@ -108,7 +176,15 @@ os.makedirs(
 for cycle in range(NUM_CYCLES):
 
     print("\n========================================")
-    print("Training Cycle :", cycle + 1)
+
+    print(
+
+        "Training Cycle :",
+
+        cycle + 1
+
+    )
+
     print("========================================")
 
     ##################################################
@@ -118,15 +194,16 @@ for cycle in range(NUM_CYCLES):
     for batch in range(NUM_BATCHES):
 
         print(
-            "\nBatch :",
-            batch + 1,
-            "/",
-            NUM_BATCHES
-        )
 
-        ##################################################
-        # Episode Average Uncertainty
-        ##################################################
+            "\nBatch :",
+
+            batch + 1,
+
+            "/",
+
+            NUM_BATCHES
+
+        )
 
         batch_uncertainties = []
 
@@ -144,7 +221,7 @@ for cycle in range(NUM_CYCLES):
 
             done = False
 
-            episode_uncertainty = []
+            episode_uncertainties = []
 
             ##################################################
             # One Episode = One Trajectory
@@ -153,40 +230,77 @@ for cycle in range(NUM_CYCLES):
             while not done:
 
                 ##################################################
+                # Graph
+                ##################################################
+
+                graph = graph_builder.build_graph(
+
+                    graph_state
+
+                ).to(
+
+                    DEVICE
+
+                )
+
+                ##################################################
                 # Graph Embedding
                 ##################################################
 
-                graph_embedding = gnn(
-                    graph_state
-                )
+                with torch.no_grad():
+
+                    graph_embedding = gnn(
+
+                        graph
+
+                    )
 
                 ##################################################
                 # Social Features
                 ##################################################
 
                 social_features = torch.tensor(
+
                     [[
+
                         env.positive_similarity,
+
                         env.negative_similarity
+
                     ]],
-                    dtype=torch.float32
+
+                    dtype=torch.float32,
+
+                    device=DEVICE
+
                 )
 
                 ##################################################
-                # Actor
+                # Bayesian PPO Actor
                 ##################################################
 
                 (
+
                     action,
+
                     log_prob,
+
                     entropy,
+
                     mu,
+
                     sigma,
-                    variance,
+
+                    predictive_variance,
+
                     U_epi
+
                 ) = ppo.actor(
+
                     graph_embedding,
+
                     social_features
+
                 )
 
                 ##################################################
@@ -194,8 +308,11 @@ for cycle in range(NUM_CYCLES):
                 ##################################################
 
                 value = ppo.critic(
+
                     graph_embedding,
+
                     social_features
+
                 )
 
                 ##################################################
@@ -203,12 +320,25 @@ for cycle in range(NUM_CYCLES):
                 ##################################################
 
                 (
+
                     next_graph_state,
+
                     reward,
+
                     done,
-                    arrive
+
+                    info
+
                 ) = env.step(
-                    action.squeeze(0).detach().cpu().numpy()
+
+                    action.squeeze(0)
+
+                    .detach()
+
+                    .cpu()
+
+                    .numpy()
+
                 )
 
                 ##################################################
@@ -216,22 +346,33 @@ for cycle in range(NUM_CYCLES):
                 ##################################################
 
                 ppo.memory.store(
+
                     graph_embedding,
+
                     action,
+
                     log_prob,
+
                     reward,
+
                     value,
+
                     done,
+
                     social_features,
+
                     U_epi
+
                 )
 
                 ##################################################
-                # Episode Uncertainty
+                # Store Uncertainty
                 ##################################################
 
-                episode_uncertainty.append(
+                episode_uncertainties.append(
+
                     U_epi.detach()
+
                 )
 
                 ##################################################
@@ -245,11 +386,15 @@ for cycle in range(NUM_CYCLES):
             ##################################################
 
             episode_uncertainty = torch.stack(
-                episode_uncertainty
+
+                episode_uncertainties
+
             ).mean()
 
             batch_uncertainties.append(
+
                 episode_uncertainty
+
             )
 
             ##################################################
@@ -259,56 +404,18 @@ for cycle in range(NUM_CYCLES):
             if ctal.get_stage() == 1:
 
                 triggered = ctal.update_episode_uncertainty(
+
                     episode_uncertainty
+
                 )
 
                 if triggered:
 
                     print(
+
                         "\n>>> CTAL Stage 2 Activated <<<"
+
                     )
-
-        ##################################################
-        # Bootstrap Value
-        ##################################################
-
-        next_value = torch.zeros(
-            1,
-            1
-        )
-
-        ##################################################
-        # PPO Update
-        ##################################################
-
-        statistics = ppo.update(
-            next_value
-        )
-
-        ##################################################
-        # Average Batch Uncertainty
-        ##################################################
-
-        avg_batch_uncertainty = torch.stack(
-            batch_uncertainties
-        ).mean()
-
-        print(
-            "Average Batch Uncertainty :",
-            avg_batch_uncertainty.item()
-        )
-
-        print(
-            "Actor Loss :", statistics["actor_loss"]
-        )
-
-        print(
-            "Critic Loss :", statistics["critic_loss"]
-        )
-
-        print(
-            "Current Stage :", ctal.get_stage()
-        )
 
         ##################################################
         # Stage 2 : Counterfactual Active Learning
@@ -316,54 +423,114 @@ for cycle in range(NUM_CYCLES):
 
         if ctal.get_stage() == 2:
 
-            print(
-                "\nRunning Counterfactual Trajectories Active Learning..."
+            ##################################################
+            # Compute PPO Advantages
+            ##################################################
+
+            advantages, returns = ppo.compute_GAE(
+
+                next_value=0.0
+
             )
 
             ##################################################
-            # Loop Through Stored Trajectories
+            # Counterfactual Analysis
             ##################################################
 
             for i in range(len(ppo.memory.states)):
 
-                ##################################################
-                # State Uncertainty
-                ##################################################
-
-                state_uncertainty = ppo.memory.uncertainties[i]
-
-                ##################################################
-                # Trigger Counterfactual Analysis
-                ##################################################
-
                 if ctal.trigger_counterfactual(
-                        state_uncertainty
+
+                    ppo.memory.uncertainties[i]
+
                 ):
 
-                    result = ctal.counterfactual_policy_analysis(
+                    ctal.counterfactual_policy_analysis(
+
                         graph_embedding=ppo.memory.states[i],
+
                         social_features=ppo.memory.social_features[i],
-                        advantages=torch.tensor([[1.0]])
+
+                        advantages=advantages[i].unsqueeze(0)
+
                     )
 
-                    ##################################################
-                    # Replace Action
-                    ##################################################
-
-                    ppo.memory.actions[i] = result["best_action"]
-
         ##################################################
-        # Save Models
+        # PPO Update
         ##################################################
 
-        if (cycle + 1) % 10 == 0:
+        statistics = ppo.update(
+
+            next_value=0.0
+
+        )
+
+        ##################################################
+        # Batch Statistics
+        ##################################################
+
+        average_batch_uncertainty = torch.stack(
+
+            batch_uncertainties
+
+        ).mean()
+
+        ##################################################
+        # Display Training Statistics
+        ##################################################
+
+        print(
+
+            "Average Batch Uncertainty :",
+
+            average_batch_uncertainty.item()
+
+        )
+
+        print(
+
+            "Actor Loss :",
+
+            statistics["actor_loss"]
+
+        )
+
+        print(
+
+            "Critic Loss :",
+
+            statistics["critic_loss"]
+
+        )
+
+        print(
+
+            "Current Stage :",
+
+            ctal.get_stage()
+
+        )
+
+        ##################################################
+        # Save Models Every 10 Cycles
+        ##################################################
+
+        if (
+
+            cycle + 1
+
+        ) % 10 == 0:
 
             ppo.save(
-                SAVE_PATH
+
+                PPO_WEIGHTS_DIRECTORY
+
             )
 
             print(
-                "\nModels saved."
+
+                "\nModels Saved."
+
             )
 
 ##################################################
@@ -371,9 +538,14 @@ for cycle in range(NUM_CYCLES):
 ##################################################
 
 ppo.save(
-    SAVE_PATH
+
+    PPO_WEIGHTS_DIRECTORY
+
 )
 
 print(
-    "\nTraining Finished."
+
+    "\nTraining Finished Successfully."
+
 )
+
