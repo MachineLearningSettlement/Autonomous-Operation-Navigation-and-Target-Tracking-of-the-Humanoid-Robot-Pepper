@@ -1,1 +1,1 @@
-
+The following samples illustrate the simulation environment used throughout this project. Robot navigation was developed and trained in Gazebo, which provides a realistic 3D laboratory environment with sensor simulation, while RViz was used to visualize LiDAR data, occupancy maps, localization, planned trajectories, and navigation performance in real time. These simulations were employed to train, validate, and evaluate the proposed reinforcement learning framework before deployment on the Pepper humanoid robot.
