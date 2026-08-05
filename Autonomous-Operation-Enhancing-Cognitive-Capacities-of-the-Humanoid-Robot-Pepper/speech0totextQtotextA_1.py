@@ -13,7 +13,7 @@ from datetime import datetime
 
 
 # Configurez votre clé API pour Google Gemini
-genai.configure(api_key="AIzaSyDkDWQpai1hCJ-nusqqZ-nRb0XERY8kunQ")
+genai.configure(api_key=YOUR_API)
 
 
 def speech_to_text(output_file):
