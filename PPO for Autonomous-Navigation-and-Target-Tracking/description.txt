@@ -5,3 +5,38 @@ in dynamic environments. The navigation policy is learned using PPO enhanced wit
 A Counterfactual Trajectory Active Learning (CTAL) strategy further improves policy optimization by exploring the most informative 
   
 alternative trajectories. The result is a more reliable, data-efficient, and uncertainty-aware autonomous navigation system.
+
+
+
+***RESULTS***:
+
+Five reinforcement learning approaches were compared: NNN-PPO (standard PPO), BNN-PPO (PPO with Bayesian Neural Networks), MCD-PPO (PPO with Monte Carlo Dropout), BNN-CTAL-PPO (Bayesian PPO enhanced with Counterfactual Trajectory Active Learning), and MCD-CTAL-PPO (Monte Carlo Dropout PPO enhanced with CTAL). These methods were benchmarked under identical training and testing conditions to assess the contribution of uncertainty estimation and active learning to autonomous robot navigation.
+
+>>> Best performances were obtained with BNN-CTAL-PPO
+
+==============================================================
+                 TRAINING RESULTS (64 Targets)
+==============================================================
+
++-----------------------------+---------+---------+---------+--------------+--------------+
+| Metric                      | NNN-PPO | BNN-PPO | MCD-PPO | BNN-CTAL-PPO | MCD-CTAL-PPO |
++-----------------------------+---------+---------+---------+--------------+--------------+
+| Average Cumulative Reward ↑ |   164   |   198   |   189   |     254      |     239      |
+| Episodes to Convergence ↓   |  4800   |  3600   |  3900   |     2500     |     3000     |
+| Training Time (days) ↓      |   2.2   |   2.7   |   2.5   |      3.1     |      2.9     |
++-----------------------------+---------+---------+---------+--------------+--------------+
+
+
+==============================================================
+                TEST RESULTS (80 Unseen Targets)
+==============================================================
+
++--------------------------------+---------+---------+---------+--------------+--------------+
+| Metric                         | NNN-PPO | BNN-PPO | MCD-PPO | BNN-CTAL-PPO | MCD-CTAL-PPO |
++--------------------------------+---------+---------+---------+--------------+--------------+
+| Navigation Success Rate (%) ↑  |  52.50  |  63.75  |  60.00  |    81.25     |    73.75     |
+| Timeout Rate (%) ↓             |  26.25  |  21.25  |  21.25  |    10.00     |    13.75     |
+| Collision Rate (%) ↓           |  21.25  |  15.00  |  18.75  |     8.75     |    12.50     |
+| Average Navigation Time (s) ↓  |   74.3  |   61.5  |   65.8  |     45.2     |     50.1     |
+| Average Trajectory Length (m) ↓|   18.7  |   16.2  |   16.9  |     13.8     |     14.6     |
++--------------------------------+---------+---------+---------+--------------+--------------+
