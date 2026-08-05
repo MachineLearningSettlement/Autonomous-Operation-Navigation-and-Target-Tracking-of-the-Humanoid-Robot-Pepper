@@ -4,4 +4,6 @@ Robot navigation was developed and trained in Gazebo, which provides a realistic
 
 RViz was employed to visualize LiDAR measurements, occupancy maps, robot localization, planned trajectories, and navigation performance in real time.
 
-These simulation environments were used to train, validate, and evaluate the proposed reinforcement learning framework prior to its deployment on the Pepper humanoid robot.
+These simulation environments were used to train, validate, and evaluate the proposed reinforcement learning framework prior to its deployment 
+
+on the Pepper humanoid robot.
