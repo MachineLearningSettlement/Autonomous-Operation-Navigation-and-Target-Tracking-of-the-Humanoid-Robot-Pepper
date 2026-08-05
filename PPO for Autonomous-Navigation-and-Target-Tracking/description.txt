@@ -1,0 +1,7 @@
+Phase 2 focuses on Autonomous Navigation & Target Tracking making Pepper to autonomously navigate toward targets while making robust decisions 
+
+in dynamic environments. The navigation policy is learned using PPO enhanced with Bayesian Neural Networks and Monte Carlo Dropout for uncertainty
+  
+estimation. A Counterfactual Trajectory Active Learning (CTAL) strategy further improves policy optimization by exploring the most informative 
+  
+alternative trajectories. The result is a more reliable, data-efficient, and uncertainty-aware autonomous navigation system.
