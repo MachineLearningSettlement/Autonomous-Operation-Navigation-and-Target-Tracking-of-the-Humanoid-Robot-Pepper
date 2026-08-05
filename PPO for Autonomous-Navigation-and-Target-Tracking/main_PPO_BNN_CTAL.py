@@ -82,12 +82,14 @@ K = 100
 UNCERTAINTY_THRESHOLD = 0.15
 
 ##################################################
-# Saving Directories
+# Directories
 ##################################################
 
 MODEL_DIRECTORY = "./weights"
 
 LOG_DIRECTORY = "./logs"
+
+PRETRAINED_GNN_DIRECTORY = "./weights/pretrained_gnn.pth"
 
 os.makedirs(
 
@@ -102,8 +104,6 @@ os.makedirs(
     LOG_DIRECTORY,
 
     exist_ok=True
-
-  
 
 )
 
@@ -124,12 +124,18 @@ environment = PepperEnvironment(
 graph_builder = GraphBuilder()
 
 ##################################################
-# Graph Neural Network
+# Pretrained GraphSAGE
 ##################################################
 
 gnn = GraphSAGE().to(
 
     DEVICE
+
+)
+
+gnn.load_pretrained(
+
+    device=DEVICE
 
 )
 
@@ -143,6 +149,10 @@ ppo = PPO(
 
     social_dim=2,
 
+    actor_lr=3e-4,
+
+    critic_lr=1e-3,
+
     gamma=0.99,
 
     lam=0.95,
@@ -153,7 +163,9 @@ ppo = PPO(
 
     critic_coef=0.5,
 
-    epochs=PPO_OPTIMIZATION_EPOCHS
+    epochs=PPO_OPTIMIZATION_EPOCHS,
+
+    threshold_C=UNCERTAINTY_THRESHOLD
 
 )
 
@@ -211,19 +223,22 @@ if __name__ == "__main__":
 
     try:
 
-        print("\n===================================")
+        print("\n======================================")
+
         print(" Bayesian PPO + CTAL ")
+
         print(" Pepper Robot Navigation ")
-        print("===================================\n")
+
+        print("======================================\n")
 
         ##################################################
-        # Start Training
+        # Training
         ##################################################
 
         trainer.train()
 
         ##################################################
-        # Save Final Models
+        # Save Final Actor & Critic
         ##################################################
 
         ppo.save(
