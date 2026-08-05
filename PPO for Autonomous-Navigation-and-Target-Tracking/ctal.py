@@ -7,7 +7,7 @@
 import copy
 import torch
 import torch.nn.functional as F
-
+import torch.optim as optim
 
 ##################################################
 # Counterfactual Trajectories Active Learning
@@ -20,44 +20,83 @@ class CTAL:
     ##################################################
 
     def __init__(
+
             self,
+
             actor,
+
             threshold,
+
+            actor_lr=3e-4,
+
+            clip=0.2,
+
             M=10,
+
             K=100
+
     ):
+
         ##################################################
-        # Bayesian PPO Actor
+        # Current Bayesian PPO Actor
         ##################################################
 
         self.actor = actor
 
         ##################################################
-        # Stage 1 → Stage 2 Threshold
+        # Frozen Old Policy
+        ##################################################
+
+        self.old_actor = copy.deepcopy(
+
+            actor
+
+        )
+
+        ##################################################
+        # PPO Optimizer
+        ##################################################
+
+        self.optimizer = optim.Adam(
+
+            self.actor.parameters(),
+
+            lr=actor_lr
+
+        )
+
+        ##################################################
+        # PPO Clip
+        ##################################################
+
+        self.clip = clip
+
+        ##################################################
+        # CTAL Threshold
         ##################################################
 
         self.threshold = threshold
 
         ##################################################
-        # Number of consecutive episodes
+        # Consecutive Episodes
         ##################################################
 
         self.M = M
 
         ##################################################
-        # Number of counterfactual actions
+        # Counterfactual Candidates
         ##################################################
 
         self.K = K
 
         ##################################################
-        # Stage Flag
+        # Stage
         ##################################################
 
         self.stage = 1
 
         ##################################################
-        # Episode uncertainty history
+        # Episode Uncertainty History
         ##################################################
 
         self.episode_uncertainties = []
@@ -67,33 +106,49 @@ class CTAL:
     ##################################################
 
     def update_episode_uncertainty(
+
             self,
+
             episode_uncertainty
+
     ):
-        ##################################################
-        # Store average uncertainty
-        ##################################################
 
         self.episode_uncertainties.append(
+
             episode_uncertainty
+
         )
 
-        ##################################################
-        # Keep only last M episodes
-        ##################################################
-
         if len(self.episode_uncertainties) > self.M:
+
             self.episode_uncertainties.pop(0)
 
         ##################################################
-        # Stage 2 Trigger
+        # Trigger Stage 2
         ##################################################
 
         if (
+
             len(self.episode_uncertainties) == self.M
-            and max(self.episode_uncertainties) < self.threshold
+
+            and
+
+            max(self.episode_uncertainties) < self.threshold
+
         ):
+
             self.stage = 2
+
+            ##################################################
+            # Synchronize Old Policy
+            ##################################################
+
+            self.old_actor.load_state_dict(
+
+                self.actor.state_dict()
+
+            )
+
             return True
 
         return False
@@ -103,17 +158,23 @@ class CTAL:
     ##################################################
 
     def get_stage(self):
+
         return self.stage
 
     ##################################################
-    # Should Counterfactual Analysis be Triggered ?
+    # Trigger Counterfactual Analysis
     ##################################################
 
     def trigger_counterfactual(
+
             self,
+
             state_uncertainty
+
     ):
+
         if self.stage == 1:
+
             return False
 
         return state_uncertainty > self.threshold
@@ -123,211 +184,381 @@ class CTAL:
     ##################################################
 
     def generate_counterfactual_actions(
+
             self,
+
             graph_embedding,
+
             social_features
+
     ):
+
         ##################################################
-        # Bayesian Forward
+        # Old Policy Forward
         ##################################################
 
         with torch.no_grad():
+
             (
+
                 _,
+
                 _,
+
                 _,
-                mu_final,
-                sigma_final,
+
+                mu_old,
+
+                sigma_old,
+
                 _,
+
                 _
-            ) = self.actor(
+
+            ) = self.old_actor(
+
                 graph_embedding,
+
                 social_features
+
             )
 
         ##################################################
         # Old Policy Distribution
         ##################################################
 
-        distribution = torch.distributions.Normal(
-            mu_final,
-            sigma_final
+        old_distribution = torch.distributions.Normal(
+
+            mu_old,
+
+            sigma_old
+
         )
 
         ##################################################
-        # Sample K Candidate Actions
+        # Sample K Counterfactual Actions
         ##################################################
 
         candidate_actions = []
-        candidate_log_probs = []
+
+        candidate_log_probs_old = []
 
         for _ in range(self.K):
-            action = distribution.rsample()
 
-            log_prob = distribution.log_prob(
+            action = old_distribution.rsample()
+
+            log_prob_old = old_distribution.log_prob(
+
                 action
+
             ).sum(
+
                 dim=1,
+
                 keepdim=True
+
             )
 
             candidate_actions.append(
+
                 action
+
             )
 
-            candidate_log_probs.append(
-                log_prob
+            candidate_log_probs_old.append(
+
+                log_prob_old
+
             )
 
         return (
+
             candidate_actions,
-            candidate_log_probs
+
+            candidate_log_probs_old
+
         )
 
     ##################################################
-    # Evaluate Counterfactual PPO Objective
+    # Counterfactual PPO Update
     ##################################################
 
-    def evaluate_counterfactuals(
+    def counterfactual_update(
+
             self,
+
             graph_embedding,
+
             social_features,
+
             candidate_actions,
+
+            candidate_log_probs_old,
+
             advantages
+
     ):
-        scores = []
+
+        candidate_scores = []
+
+        candidate_actor_states = []
 
         ##################################################
-        # Evaluate every candidate action
+        # Evaluate Every Candidate
         ##################################################
 
-        for action in candidate_actions:
+        for j in range(self.K):
+
+            ##################################################
+            # Restore Current Actor
+            ##################################################
+
+            self.actor.load_state_dict(
+
+                self.old_actor.state_dict()
+
+            )
+
+            ##################################################
+            # New Policy Forward
+            ##################################################
+
             (
+
                 _,
+
                 _,
-                _,
+
+                entropy,
+
                 mu_new,
+
                 sigma_new,
+
                 _,
+
                 _
+
             ) = self.actor(
+
                 graph_embedding,
+
                 social_features
+
             )
 
-            distribution_new = torch.distributions.Normal(
+            new_distribution = torch.distributions.Normal(
+
                 mu_new,
+
                 sigma_new
+
             )
 
-            log_prob_new = distribution_new.log_prob(
-                action
+            log_prob_new = new_distribution.log_prob(
+
+                candidate_actions[j]
+
             ).sum(
+
                 dim=1,
+
                 keepdim=True
+
             )
 
-            score = (
-                log_prob_new *
-                advantages
+            ##################################################
+            # PPO Ratio
+            ##################################################
+
+            ratio = torch.exp(
+
+                log_prob_new -
+
+                candidate_log_probs_old[j]
+
             )
 
-            scores.append(
-                score
+            ##################################################
+            # PPO Objective
+            ##################################################
+
+            surr1 = ratio * advantages
+
+            surr2 = torch.clamp(
+
+                ratio,
+
+                1.0 - self.clip,
+
+                1.0 + self.clip
+
+            ) * advantages
+
+            objective = torch.min(
+
+                surr1,
+
+                surr2
+
             )
 
-        return scores
+            loss = -objective.mean()
 
-    ##################################################
-    # Select Best Counterfactual Action
-    ##################################################
+            ##################################################
+            # Update Actor Parameters
+            ##################################################
 
-    def select_best_action(
-            self,
-            candidate_actions,
-            candidate_scores
-    ):
+            self.optimizer.zero_grad()
+
+            loss.backward()
+
+            torch.nn.utils.clip_grad_norm_(
+
+                self.actor.parameters(),
+
+                0.5
+
+            )
+
+            self.optimizer.step()
+
+            ##################################################
+            # Recompute Exact PPO Objective
+            ##################################################
+
+            (
+
+                _,
+
+                _,
+
+                _,
+
+                mu_updated,
+
+                sigma_updated,
+
+                _,
+
+                _
+
+            ) = self.actor(
+
+                graph_embedding,
+
+                social_features
+
+            )
+
+            updated_distribution = torch.distributions.Normal(
+
+                mu_updated,
+
+                sigma_updated
+
+            )
+
+            updated_log_prob = updated_distribution.log_prob(
+
+                candidate_actions[j]
+
+            ).sum(
+
+                dim=1,
+
+                keepdim=True
+
+            )
+
+            updated_ratio = torch.exp(
+
+                updated_log_prob -
+
+                candidate_log_probs_old[j]
+
+            )
+
+            updated_score = torch.min(
+
+                updated_ratio * advantages,
+
+                torch.clamp(
+
+                    updated_ratio,
+
+                    1.0 - self.clip,
+
+                    1.0 + self.clip
+
+                ) * advantages
+
+            )
+
+            candidate_scores.append(
+
+                updated_score.detach()
+
+            )
+
+            candidate_actor_states.append(
+
+                copy.deepcopy(
+
+                    self.actor.state_dict()
+
+                )
+
+            )
+
         ##################################################
-        # Stack Scores
+        # Select Best Counterfactual
         ##################################################
 
         scores = torch.cat(
-            candidate_scores,
-            dim=0
-        )
 
-        ##################################################
-        # Best Candidate
-        ##################################################
+            candidate_scores,
+
+            dim=0
+
+        )
 
         best_index = torch.argmax(
+
             scores
+
         ).item()
 
-        best_action = candidate_actions[best_index]
-        best_score = candidate_scores[best_index]
-
-        return (
-            best_action,
-            best_score,
-            best_index
-        )
-
-    ##################################################
-    # Counterfactual Policy Analysis
-    ##################################################
-
-    def counterfactual_policy_analysis(
-            self,
-            graph_embedding,
-            social_features,
-            advantages
-    ):
         ##################################################
-        # Generate K Counterfactual Actions
+        # Keep Best Updated Policy
         ##################################################
 
-        (
-            candidate_actions,
-            candidate_log_probs
-        ) = self.generate_counterfactual_actions(
-            graph_embedding,
-            social_features
+        self.actor.load_state_dict(
+
+            candidate_actor_states[best_index]
+
         )
 
         ##################################################
-        # Evaluate PPO Objective
+        # Synchronize Old Policy
         ##################################################
 
-        candidate_scores = self.evaluate_counterfactuals(
-            graph_embedding,
-            social_features,
-            candidate_actions,
-            advantages
+        self.old_actor.load_state_dict(
+
+            self.actor.state_dict()
+
         )
 
         ##################################################
-        # Select Best Action
-        ##################################################
-
-        (
-            best_action,
-            best_score,
-            best_index
-        ) = self.select_best_action(
-            candidate_actions,
-            candidate_scores
-        )
-
-        ##################################################
-        # Return Best Counterfactual Action
+        # Return
         ##################################################
 
         return {
-            "best_action": best_action,
-            "best_score": best_score,
-            "best_index": best_index,
-            "candidate_actions": candidate_actions,
-            "candidate_scores": candidate_scores,
-            "candidate_log_probs": candidate_log_probs
+
+            "best_action": candidate_actions[best_index],
+
+            "best_score": candidate_scores[best_index],
+
+            "best_index": best_index
+
         }
