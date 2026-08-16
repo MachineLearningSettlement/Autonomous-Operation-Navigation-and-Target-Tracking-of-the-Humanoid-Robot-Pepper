@@ -22,7 +22,7 @@ Each CSV row represents ONE training sample:
 
 Important:
 The 20 frames define the 2-second scene window. Standard pretrained
-TimeSformer checkpoints commonly use a native temporal length of 8 frames.
+TimeSformer checkpoints commonly use a native temporal length of 16 frames.
 Therefore, by default, the script uniformly samples the 20-frame scene down
 to the checkpoint's native number of frames before inference. This preserves
 the pretrained temporal architecture instead of randomly initializing temporal
@@ -47,8 +47,8 @@ from transformers import AutoImageProcessor, TimesformerModel
 # Configuration
 # ============================================================
 
-MODEL_ID = "facebook/timesformer-base-finetuned-k400"
-
+MODEL_ID = "facebook/timesformer-hr-finetuned-k400"    ###16-frame TimeSformer-HR Kinetics-400 checkpoint###
+ 
 SCENE_FRAMES = 20          # 2-second scene window
 TARGET_DIM = 6
 
