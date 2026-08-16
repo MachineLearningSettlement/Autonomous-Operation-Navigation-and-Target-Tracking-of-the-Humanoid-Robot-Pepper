@@ -178,11 +178,11 @@ class PepperEnvironment:
         )
 
         self.imu_processor = AutoImageProcessor.from_pretrained(
-            "facebook/timesformer-base-finetuned-k400"
+            "facebook/timesformer-hr-finetuned-k400"
         )
 
         self.imu_timesformer = TimesformerModel.from_pretrained(
-            "facebook/timesformer-base-finetuned-k400"
+            "facebook/timesformer-hr-finetuned-k400"
         ).to(self.device)
 
         self.imu_timesformer.eval()
@@ -210,11 +210,15 @@ class PepperEnvironment:
             map_location=self.device
         )
 
-        self.imu_regression_head.load_state_dict(
-            checkpoint["regression_head"]
-            if "regression_head" in checkpoint
-            else checkpoint
-        )
+        state_dict = checkpoint["model_state_dict"]
+
+        regression_head_state = {
+            key.replace("regression_head.", ""): value
+            for key, value in state_dict.items()
+            if key.startswith("regression_head.")
+        }
+
+        self.imu_regression_head.load_state_dict(regression_head_state)
 
         for parameter in self.imu_timesformer.parameters():
             parameter.requires_grad = False
