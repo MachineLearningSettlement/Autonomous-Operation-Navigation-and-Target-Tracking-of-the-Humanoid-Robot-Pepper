@@ -52,12 +52,12 @@ MODEL_ID = "facebook/timesformer-base-finetuned-k400"
 SCENE_FRAMES = 20          # 2-second scene window
 TARGET_DIM = 6
 
-BATCH_SIZE = 4
-EPOCHS = 30
+BATCH_SIZE = 100
+EPOCHS = 150
 LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-4
 
-VAL_RATIO = 0.20
+VAL_RATIO = 0.30
 NUM_WORKERS = 0
 SEED = 42
 
@@ -97,6 +97,11 @@ class VideoIMUDataset(Dataset):
 
         with open(manifest_path, "r", newline="") as f:
             reader = csv.DictReader(f)
+
+            """ video_path → where the video file is located
+                start_frame → which 20-frame scene to use
+                ax, ay, az → linear acceleration
+                wx, wy, wz → angular velocity """" 
 
             required = {
                 "video_path",
