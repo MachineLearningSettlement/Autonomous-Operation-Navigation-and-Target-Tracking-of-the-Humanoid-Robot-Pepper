@@ -14,10 +14,6 @@ from torch_geometric.nn import (
 )
 
 
-##################################################
-# Pretrained GNN Path
-##################################################
-
 PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth"
 
 
@@ -44,7 +40,7 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Robot Encoder
-        # 6 → 32 → 64 → 128
+        # 6 -> 32 -> 64 -> 128
         ##################################################
 
         self.robot_encoder = nn.Sequential(
@@ -62,7 +58,7 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Goal Encoder
-        # 3 → 32 → 64 → 128
+        # 3 -> 32 -> 64 -> 128
         ##################################################
 
         self.goal_encoder = nn.Sequential(
@@ -80,7 +76,7 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Obstacle Encoder
-        # 2 → 16 → 32 → 128
+        # 2 -> 16 -> 32 -> 128
         ##################################################
 
         self.obstacle_encoder = nn.Sequential(
@@ -98,7 +94,7 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Human Encoder
-        # 1029 → 512 → 256 → 128
+        # 1029 -> 512 -> 256 -> 128
         ##################################################
 
         self.human_encoder = nn.Sequential(
@@ -116,7 +112,7 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Edge Encoder
-        # 1 → 32 → 64 → 128
+        # 1 -> 32 -> 64 -> 128
         ##################################################
 
         self.edge_encoder = nn.Sequential(
@@ -194,9 +190,7 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         self.bn1 = nn.BatchNorm1d(128)
-
         self.bn2 = nn.BatchNorm1d(128)
-
         self.bn3 = nn.BatchNorm1d(128)
 
         ##################################################
@@ -209,8 +203,6 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Graph Embedding Head
-        #
-        # 128 → 64 → 128
         ##################################################
 
         self.graph_head = nn.Sequential(
@@ -233,28 +225,23 @@ class GraphSAGE(nn.Module):
     def encode_nodes(self, data):
 
         robot_x = self.robot_encoder(
-            data["robot"].x
+            data.robot_x
         )
 
         goal_x = self.goal_encoder(
-            data["goal"].x
+            data.goal_x
         )
 
         obstacle_x = self.obstacle_encoder(
-            data["obstacle"].x
+            data.obstacle_x
         )
 
         human_x = self.human_encoder(
-            data["human"].x
+            data.human_x
         )
 
         ##################################################
         # Same ordering as graph_builder.py
-        #
-        # Robot
-        # Goal
-        # Obstacles
-        # Humans
         ##################################################
 
         x = torch.cat(
@@ -275,13 +262,9 @@ class GraphSAGE(nn.Module):
 
     def encode_edges(self, data):
 
-        edge_attr = data.edge_attr
-
-        edge_attr = self.edge_encoder(
-            edge_attr
+        return self.edge_encoder(
+            data.edge_attr
         )
-
-        return edge_attr
 
     ##################################################
     # Forward
@@ -289,25 +272,9 @@ class GraphSAGE(nn.Module):
 
     def forward(self, data):
 
-        ##################################################
-        # Node Embeddings
-        ##################################################
+        x = self.encode_nodes(data)
 
-        x = self.encode_nodes(
-            data
-        )
-
-        ##################################################
-        # Edge Embeddings
-        ##################################################
-
-        edge_attr = self.encode_edges(
-            data
-        )
-
-        ##################################################
-        # Edge Connectivity
-        ##################################################
+        edge_attr = self.encode_edges(data)
 
         edge_index = data.edge_index
 
@@ -322,9 +289,7 @@ class GraphSAGE(nn.Module):
         )
 
         x = self.bn1(x)
-
         x = F.relu(x)
-
         x = self.drop(x)
 
         ##################################################
@@ -338,9 +303,7 @@ class GraphSAGE(nn.Module):
         )
 
         x = self.bn2(x)
-
         x = F.relu(x)
-
         x = self.drop(x)
 
         ##################################################
@@ -354,7 +317,6 @@ class GraphSAGE(nn.Module):
         )
 
         x = self.bn3(x)
-
         x = F.relu(x)
 
         ##################################################
@@ -386,8 +348,6 @@ class GraphSAGE(nn.Module):
 
         ##################################################
         # Final Output
-        #
-        # [batch_size, 128]
         ##################################################
 
         return graph_embedding
