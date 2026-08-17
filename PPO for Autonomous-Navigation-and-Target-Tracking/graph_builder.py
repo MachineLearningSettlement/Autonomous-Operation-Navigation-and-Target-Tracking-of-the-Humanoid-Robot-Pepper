@@ -7,7 +7,7 @@
 import math
 import torch
 
-from torch_geometric.data import HeteroData
+from torch_geometric.data import Data
 
 
 ##################################################
@@ -24,7 +24,7 @@ def encode_node(node_type, node):
     #  linear_velocity,
     #  angular_velocity]
     #
-    # Dimension = 6
+    # 6 features
     ##################################################
 
     if node_type == "robot":
@@ -43,7 +43,7 @@ def encode_node(node_type, node):
     #
     # [x, y, z]
     #
-    # Dimension = 3
+    # 3 features
     ##################################################
 
     elif node_type == "goal":
@@ -59,7 +59,7 @@ def encode_node(node_type, node):
     #
     # [distance, orientation]
     #
-    # Dimension = 2
+    # 2 features
     ##################################################
 
     elif node_type == "obstacle":
@@ -73,10 +73,10 @@ def encode_node(node_type, node):
     # Human
     #
     # [x, y, z]
-    # + 6 IMU values
-    # + 1020 MotionBERT values
+    # + 6 IMU
+    # + 1020 MotionBERT
     #
-    # Dimension = 1029
+    # 1029 features
     ##################################################
 
     elif node_type == "human":
@@ -87,17 +87,17 @@ def encode_node(node_type, node):
 
         if len(position) != 3:
             raise ValueError(
-                "Human position must contain exactly 3 values."
+                "Human position must contain 3 values."
             )
 
         if len(imu) != 6:
             raise ValueError(
-                "Human IMU must contain exactly 6 values."
+                "Human IMU must contain 6 values."
             )
 
         if len(motionbert) != 1020:
             raise ValueError(
-                "MotionBERT representation must contain exactly 1020 values."
+                "MotionBERT must contain 1020 values."
             )
 
         return position + imu + motionbert
@@ -118,10 +118,10 @@ def compute_distance(position_1, position_2):
     return math.sqrt(
 
         (position_1[0] - position_2[0]) ** 2
-
-        + (position_1[1] - position_2[1]) ** 2
-
-        + (position_1[2] - position_2[2]) ** 2
+        +
+        (position_1[1] - position_2[1]) ** 2
+        +
+        (position_1[2] - position_2[2]) ** 2
 
     )
 
@@ -131,147 +131,126 @@ def compute_distance(position_1, position_2):
 ##################################################
 
 def build_graph(
+
         robot_node,
         target_node,
         obstacle_nodes,
         human_nodes
+
 ):
 
     ##################################################
-    # Heterogeneous Graph
+    # Node Lists
+    #
+    # Global ordering:
+    #
+    # 0       → Robot
+    # 1       → Goal
+    # 2...    → Obstacles
+    # ...     → Humans
     ##################################################
 
-    graph = HeteroData()
+    node_features = []
+
+    node_types = []
+
+    node_positions = []
 
     ##################################################
     # Robot
     ##################################################
 
-    robot_features = encode_node(
-        "robot",
-        robot_node
+    node_features.append(
+        encode_node(
+            "robot",
+            robot_node
+        )
     )
 
-    graph["robot"].x = torch.tensor(
-        [robot_features],
-        dtype=torch.float32
+    node_types.append("robot")
+
+    node_positions.append(
+        robot_node["position"]
     )
+
+    robot_index = 0
 
     ##################################################
     # Goal
     ##################################################
 
-    goal_features = encode_node(
-        "goal",
-        target_node
+    node_features.append(
+        encode_node(
+            "goal",
+            target_node
+        )
     )
 
-    graph["goal"].x = torch.tensor(
-        [goal_features],
-        dtype=torch.float32
+    node_types.append("goal")
+
+    node_positions.append(
+        target_node["position"]
     )
+
+    goal_index = 1
 
     ##################################################
     # Obstacles
     ##################################################
 
-    obstacle_features = [
+    obstacle_indices = []
 
-        encode_node(
-            "obstacle",
-            obstacle
+    for obstacle in obstacle_nodes:
+
+        node_features.append(
+            encode_node(
+                "obstacle",
+                obstacle
+            )
         )
 
-        for obstacle in obstacle_nodes
+        node_types.append("obstacle")
 
-    ]
-
-    if obstacle_features:
-
-        graph["obstacle"].x = torch.tensor(
-            obstacle_features,
-            dtype=torch.float32
+        node_positions.append(
+            obstacle["position"]
         )
 
-    else:
-
-        graph["obstacle"].x = torch.empty(
-            (0, 2),
-            dtype=torch.float32
+        obstacle_indices.append(
+            len(node_features) - 1
         )
 
     ##################################################
     # Humans
     ##################################################
 
-    human_features = [
+    human_indices = []
 
-        encode_node(
-            "human",
-            human
+    for human in human_nodes:
+
+        node_features.append(
+            encode_node(
+                "human",
+                human
+            )
         )
 
-        for human in human_nodes
+        node_types.append("human")
 
-    ]
-
-    if human_features:
-
-        graph["human"].x = torch.tensor(
-            human_features,
-            dtype=torch.float32
+        node_positions.append(
+            human["position"]
         )
 
-    else:
-
-        graph["human"].x = torch.empty(
-            (0, 1029),
-            dtype=torch.float32
+        human_indices.append(
+            len(node_features) - 1
         )
 
     ##################################################
-    # Global Node Indices
-    ##################################################
-
-    robot_index = 0
-
-    goal_index = 1
-
-    obstacle_indices = [
-
-        2 + i
-
-        for i in range(
-            len(obstacle_nodes)
-        )
-
-    ]
-
-    human_start = (
-
-        2
-
-        + len(obstacle_nodes)
-
-    )
-
-    human_indices = [
-
-        human_start + i
-
-        for i in range(
-            len(human_nodes)
-        )
-
-    ]
-
-    ##################################################
-    # Edges
+    # Edge Construction
     ##################################################
 
     edge_index = []
 
-    edge_distances = []
+    edge_attr = []
 
     ##################################################
     # Robot ↔ Goal
@@ -287,7 +266,7 @@ def build_graph(
         [goal_index, robot_index]
     ])
 
-    edge_distances.extend([
+    edge_attr.extend([
         [distance],
         [distance]
     ])
@@ -312,7 +291,7 @@ def build_graph(
             [obstacle_index, robot_index]
         ])
 
-        edge_distances.extend([
+        edge_attr.extend([
             [distance],
             [distance]
         ])
@@ -337,7 +316,7 @@ def build_graph(
             [human_index, robot_index]
         ])
 
-        edge_distances.extend([
+        edge_attr.extend([
             [distance],
             [distance]
         ])
@@ -368,13 +347,84 @@ def build_graph(
                 [h2, h1]
             ])
 
-            edge_distances.extend([
+            edge_attr.extend([
                 [distance],
                 [distance]
             ])
 
     ##################################################
-    # Edge Tensors
+    # Convert Node Features
+    #
+    # IMPORTANT:
+    #
+    # Raw node dimensions are different.
+    #
+    # Therefore we do NOT create x here.
+    #
+    # The GNN-specific encoders receive the
+    # node-type feature lists below.
+    ##################################################
+
+    ##################################################
+    # Store node-type information
+    ##################################################
+
+    graph = Data()
+
+    graph.robot_x = torch.tensor(
+        [node_features[robot_index]],
+        dtype=torch.float32
+    )
+
+    graph.goal_x = torch.tensor(
+        [node_features[goal_index]],
+        dtype=torch.float32
+    )
+
+    ##################################################
+    # Obstacles
+    ##################################################
+
+    if obstacle_indices:
+
+        graph.obstacle_x = torch.tensor(
+            [
+                node_features[i]
+                for i in obstacle_indices
+            ],
+            dtype=torch.float32
+        )
+
+    else:
+
+        graph.obstacle_x = torch.empty(
+            (0, 2),
+            dtype=torch.float32
+        )
+
+    ##################################################
+    # Humans
+    ##################################################
+
+    if human_indices:
+
+        graph.human_x = torch.tensor(
+            [
+                node_features[i]
+                for i in human_indices
+            ],
+            dtype=torch.float32
+        )
+
+    else:
+
+        graph.human_x = torch.empty(
+            (0, 1029),
+            dtype=torch.float32
+        )
+
+    ##################################################
+    # Global Edge Index
     ##################################################
 
     if edge_index:
@@ -385,7 +435,7 @@ def build_graph(
         ).t().contiguous()
 
         graph.edge_attr = torch.tensor(
-            edge_distances,
+            edge_attr,
             dtype=torch.float32
         )
 
@@ -402,21 +452,23 @@ def build_graph(
         )
 
     ##################################################
+    # Node Type Ordering
+    ##################################################
+
+    graph.node_types = node_types
+
+    ##################################################
+    # Number of Nodes
+    ##################################################
+
+    graph.num_nodes = len(node_features)
+
+    ##################################################
     # Batch
     ##################################################
 
-    total_nodes = (
-
-        2
-
-        + len(obstacle_nodes)
-
-        + len(human_nodes)
-
-    )
-
     graph.batch = torch.zeros(
-        total_nodes,
+        graph.num_nodes,
         dtype=torch.long
     )
 
