@@ -22,48 +22,49 @@ def encode_node(node_type, node):
     [
         x,
         y,
+        z,
         theta,
         linear_velocity,
-        angular_velocity,
-        node_type
+        angular_velocity
     ]
+    Dimension = 6
 
     Goal:
     [
         x,
         y,
-        0,
-        0,
-        0,
-        node_type
+        z
     ]
+    Dimension = 3
 
     Obstacle:
     [
-        x,
-        y,
         distance,
-        0,
-        0,
-        node_type
+        orientation
     ]
+    Dimension = 2
 
     Human:
     [
         x,
         y,
-        0,
-        0,
-        0,
-        node_type
+        z,
+        imu_1,
+        imu_2,
+        imu_3,
+        imu_4,
+        imu_5,
+        imu_6,
+        motionbert_1,
+        ...,
+        motionbert_1020
     ]
-
-    Node type:
-    Robot     = 0
-    Goal      = 1
-    Obstacle  = 2
-    Human     = 3
+    Dimension = 1029
     """
+
+    ##################################################
+    # Robot
+    ##################################################
 
     if node_type == "robot":
 
@@ -73,15 +74,19 @@ def encode_node(node_type, node):
 
             node["position"][1],
 
+            node["position"][2],
+
             node["orientation"],
 
             node["linear_velocity"],
 
-            node["angular_velocity"],
-
-            0.0
+            node["angular_velocity"]
 
         ]
+
+    ##################################################
+    # Goal
+    ##################################################
 
     elif node_type == "goal":
 
@@ -91,33 +96,27 @@ def encode_node(node_type, node):
 
             node["position"][1],
 
-            0.0,
-
-            0.0,
-
-            0.0,
-
-            1.0
+            node["position"][2]
 
         ]
+
+    ##################################################
+    # Obstacle
+    ##################################################
 
     elif node_type == "obstacle":
 
         feature = [
 
-            node["position"][0],
-
-            node["position"][1],
-
             node["distance"],
 
-            0.0,
-
-            0.0,
-
-            2.0
+            node["orientation"]
 
         ]
+
+    ##################################################
+    # Human
+    ##################################################
 
     elif node_type == "human":
 
@@ -127,25 +126,46 @@ def encode_node(node_type, node):
 
             node["position"][1],
 
-            0.0,
-
-            0.0,
-
-            0.0,
-
-            3.0
+            node["position"][2]
 
         ]
+
+        ##################################################
+        # IMU Predictions
+        ##################################################
+
+        feature.extend(
+
+            node["imu_features"]
+
+        )
+
+        ##################################################
+        # MotionBERT Features
+        ##################################################
+
+        feature.extend(
+
+            node["motionbert_features"]
+
+        )
+
+    ##################################################
+    # Unknown Node
+    ##################################################
 
     else:
 
         raise ValueError(
 
-            "Unknown node type"
+            "Unknown node type: "
+
+            + str(node_type)
 
         )
 
     return feature
+
 
 ##################################################
 # Build Graph
@@ -239,6 +259,9 @@ def build_graph(
 
         )
 
+        # Obstacle position is still needed
+        # for calculating graph edge distances.
+
         node_positions.append(
 
             obstacle["position"]
@@ -319,6 +342,12 @@ def build_graph(
 
         target_node["position"][1]
 
+    ) ** 2 + (
+
+        robot_node["position"][2] -
+
+        target_node["position"][2]
+
     ) ** 2) ** 0.5
 
     edge_attr.append([d])
@@ -342,6 +371,12 @@ def build_graph(
             node_positions[robot_index][1] -
 
             node_positions[obstacle_index][1]
+
+        ) ** 2 + (
+
+            node_positions[robot_index][2] -
+
+            node_positions[obstacle_index][2]
 
         ) ** 2) ** 0.5
 
@@ -378,6 +413,12 @@ def build_graph(
             node_positions[robot_index][1] -
 
             node_positions[human_index][1]
+
+        ) ** 2 + (
+
+            node_positions[robot_index][2] -
+
+            node_positions[human_index][2]
 
         ) ** 2) ** 0.5
 
@@ -420,6 +461,12 @@ def build_graph(
                 node_positions[h1][1] -
 
                 node_positions[h2][1]
+
+            ) ** 2 + (
+
+                node_positions[h1][2] -
+
+                node_positions[h2][2]
 
             ) ** 2) ** 0.5
 
@@ -474,9 +521,7 @@ def build_graph(
     graph = Data(
 
         x=x,
-
         edge_index=edge_index,
-
         edge_attr=edge_attr
 
     )
