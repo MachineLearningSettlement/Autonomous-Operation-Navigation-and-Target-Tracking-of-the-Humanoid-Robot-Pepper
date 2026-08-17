@@ -4,9 +4,10 @@
 # graph_builder.py
 ##################################################
 
+import math
 import torch
 
-from torch_geometric.data import Data
+from torch_geometric.data import HeteroData
 
 
 ##################################################
@@ -15,156 +16,114 @@ from torch_geometric.data import Data
 
 def encode_node(node_type, node):
 
-    """
-    Node features:
-
-    Robot:
-    [
-        x,
-        y,
-        z,
-        theta,
-        linear_velocity,
-        angular_velocity
-    ]
-    Dimension = 6
-
-    Goal:
-    [
-        x,
-        y,
-        z
-    ]
-    Dimension = 3
-
-    Obstacle:
-    [
-        distance,
-        orientation
-    ]
-    Dimension = 2
-
-    Human:
-    [
-        x,
-        y,
-        z,
-        imu_1,
-        imu_2,
-        imu_3,
-        imu_4,
-        imu_5,
-        imu_6,
-        motionbert_1,
-        ...,
-        motionbert_1020
-    ]
-    Dimension = 1029
-    """
-
     ##################################################
     # Robot
+    #
+    # [x, y, z,
+    #  orientation,
+    #  linear_velocity,
+    #  angular_velocity]
+    #
+    # Dimension = 6
     ##################################################
 
     if node_type == "robot":
 
-        feature = [
-
+        return [
             node["position"][0],
-
             node["position"][1],
-
             node["position"][2],
-
             node["orientation"],
-
             node["linear_velocity"],
-
             node["angular_velocity"]
-
         ]
 
     ##################################################
     # Goal
+    #
+    # [x, y, z]
+    #
+    # Dimension = 3
     ##################################################
 
     elif node_type == "goal":
 
-        feature = [
-
+        return [
             node["position"][0],
-
             node["position"][1],
-
             node["position"][2]
-
         ]
 
     ##################################################
     # Obstacle
+    #
+    # [distance, orientation]
+    #
+    # Dimension = 2
     ##################################################
 
     elif node_type == "obstacle":
 
-        feature = [
-
+        return [
             node["distance"],
-
             node["orientation"]
-
         ]
 
     ##################################################
     # Human
+    #
+    # [x, y, z]
+    # + 6 IMU values
+    # + 1020 MotionBERT values
+    #
+    # Dimension = 1029
     ##################################################
 
     elif node_type == "human":
 
-        feature = [
+        position = node["position"]
+        imu = node["imu"]
+        motionbert = node["motionbert"]
 
-            node["position"][0],
+        if len(position) != 3:
+            raise ValueError(
+                "Human position must contain exactly 3 values."
+            )
 
-            node["position"][1],
+        if len(imu) != 6:
+            raise ValueError(
+                "Human IMU must contain exactly 6 values."
+            )
 
-            node["position"][2]
+        if len(motionbert) != 1020:
+            raise ValueError(
+                "MotionBERT representation must contain exactly 1020 values."
+            )
 
-        ]
-
-        ##################################################
-        # IMU Predictions
-        ##################################################
-
-        feature.extend(
-
-            node["imu_features"]
-
-        )
-
-        ##################################################
-        # MotionBERT Features
-        ##################################################
-
-        feature.extend(
-
-            node["motionbert_features"]
-
-        )
-
-    ##################################################
-    # Unknown Node
-    ##################################################
+        return position + imu + motionbert
 
     else:
 
         raise ValueError(
-
-            "Unknown node type: "
-
-            + str(node_type)
-
+            f"Unknown node type: {node_type}"
         )
 
-    return feature
+
+##################################################
+# 3D Euclidean Distance
+##################################################
+
+def compute_distance(position_1, position_2):
+
+    return math.sqrt(
+
+        (position_1[0] - position_2[0]) ** 2
+
+        + (position_1[1] - position_2[1]) ** 2
+
+        + (position_1[2] - position_2[2]) ** 2
+
+    )
 
 
 ##################################################
@@ -172,139 +131,139 @@ def encode_node(node_type, node):
 ##################################################
 
 def build_graph(
-
         robot_node,
-
         target_node,
-
         obstacle_nodes,
-
         human_nodes
-
 ):
 
     ##################################################
-    # Nodes
+    # Heterogeneous Graph
     ##################################################
 
-    node_features = []
-
-    node_positions = []
+    graph = HeteroData()
 
     ##################################################
     # Robot
     ##################################################
 
-    node_features.append(
-
-        encode_node(
-
-            "robot",
-
-            robot_node
-
-        )
-
+    robot_features = encode_node(
+        "robot",
+        robot_node
     )
 
-    node_positions.append(
-
-        robot_node["position"]
-
+    graph["robot"].x = torch.tensor(
+        [robot_features],
+        dtype=torch.float32
     )
-
-    robot_index = 0
 
     ##################################################
     # Goal
     ##################################################
 
-    node_features.append(
-
-        encode_node(
-
-            "goal",
-
-            target_node
-
-        )
-
+    goal_features = encode_node(
+        "goal",
+        target_node
     )
 
-    node_positions.append(
-
-        target_node["position"]
-
+    graph["goal"].x = torch.tensor(
+        [goal_features],
+        dtype=torch.float32
     )
-
-    goal_index = 1
 
     ##################################################
     # Obstacles
     ##################################################
 
-    obstacle_indices = []
+    obstacle_features = [
 
-    for obstacle in obstacle_nodes:
-
-        node_features.append(
-
-            encode_node(
-
-                "obstacle",
-
-                obstacle
-
-            )
-
+        encode_node(
+            "obstacle",
+            obstacle
         )
 
-        # Obstacle position is still needed
-        # for calculating graph edge distances.
+        for obstacle in obstacle_nodes
 
-        node_positions.append(
+    ]
 
-            obstacle["position"]
+    if obstacle_features:
 
+        graph["obstacle"].x = torch.tensor(
+            obstacle_features,
+            dtype=torch.float32
         )
 
-        obstacle_indices.append(
+    else:
 
-            len(node_features) - 1
-
+        graph["obstacle"].x = torch.empty(
+            (0, 2),
+            dtype=torch.float32
         )
 
     ##################################################
     # Humans
     ##################################################
 
-    human_indices = []
+    human_features = [
 
-    for human in human_nodes:
-
-        node_features.append(
-
-            encode_node(
-
-                "human",
-
-                human
-
-            )
-
+        encode_node(
+            "human",
+            human
         )
 
-        node_positions.append(
+        for human in human_nodes
 
-            human["position"]
+    ]
 
+    if human_features:
+
+        graph["human"].x = torch.tensor(
+            human_features,
+            dtype=torch.float32
         )
 
-        human_indices.append(
+    else:
 
-            len(node_features) - 1
-
+        graph["human"].x = torch.empty(
+            (0, 1029),
+            dtype=torch.float32
         )
+
+    ##################################################
+    # Global Node Indices
+    ##################################################
+
+    robot_index = 0
+
+    goal_index = 1
+
+    obstacle_indices = [
+
+        2 + i
+
+        for i in range(
+            len(obstacle_nodes)
+        )
+
+    ]
+
+    human_start = (
+
+        2
+
+        + len(obstacle_nodes)
+
+    )
+
+    human_indices = [
+
+        human_start + i
+
+        for i in range(
+            len(human_nodes)
+        )
+
+    ]
 
     ##################################################
     # Edges
@@ -312,218 +271,157 @@ def build_graph(
 
     edge_index = []
 
-    edge_attr = []
+    edge_distances = []
 
     ##################################################
-    # Robot <-> Goal
+    # Robot ↔ Goal
     ##################################################
 
-    edge_index.append(
-
-        [robot_index, goal_index]
-
+    distance = compute_distance(
+        robot_node["position"],
+        target_node["position"]
     )
 
-    edge_index.append(
-
+    edge_index.extend([
+        [robot_index, goal_index],
         [goal_index, robot_index]
+    ])
 
-    )
-
-    d = ((
-
-        robot_node["position"][0] -
-
-        target_node["position"][0]
-
-    ) ** 2 + (
-
-        robot_node["position"][1] -
-
-        target_node["position"][1]
-
-    ) ** 2 + (
-
-        robot_node["position"][2] -
-
-        target_node["position"][2]
-
-    ) ** 2) ** 0.5
-
-    edge_attr.append([d])
-
-    edge_attr.append([d])
+    edge_distances.extend([
+        [distance],
+        [distance]
+    ])
 
     ##################################################
-    # Robot <-> Obstacles
+    # Robot ↔ Obstacles
     ##################################################
 
-    for obstacle_index in obstacle_indices:
+    for i, obstacle in enumerate(
+        obstacle_nodes
+    ):
 
-        d = ((
+        obstacle_index = obstacle_indices[i]
 
-            node_positions[robot_index][0] -
-
-            node_positions[obstacle_index][0]
-
-        ) ** 2 + (
-
-            node_positions[robot_index][1] -
-
-            node_positions[obstacle_index][1]
-
-        ) ** 2 + (
-
-            node_positions[robot_index][2] -
-
-            node_positions[obstacle_index][2]
-
-        ) ** 2) ** 0.5
-
-        edge_index.append(
-
-            [robot_index, obstacle_index]
-
+        distance = compute_distance(
+            robot_node["position"],
+            obstacle["position"]
         )
 
-        edge_index.append(
-
+        edge_index.extend([
+            [robot_index, obstacle_index],
             [obstacle_index, robot_index]
+        ])
 
-        )
-
-        edge_attr.append([d])
-
-        edge_attr.append([d])
+        edge_distances.extend([
+            [distance],
+            [distance]
+        ])
 
     ##################################################
-    # Robot <-> Humans
+    # Robot ↔ Humans
     ##################################################
 
-    for human_index in human_indices:
+    for i, human in enumerate(
+        human_nodes
+    ):
 
-        d = ((
+        human_index = human_indices[i]
 
-            node_positions[robot_index][0] -
-
-            node_positions[human_index][0]
-
-        ) ** 2 + (
-
-            node_positions[robot_index][1] -
-
-            node_positions[human_index][1]
-
-        ) ** 2 + (
-
-            node_positions[robot_index][2] -
-
-            node_positions[human_index][2]
-
-        ) ** 2) ** 0.5
-
-        edge_index.append(
-
-            [robot_index, human_index]
-
+        distance = compute_distance(
+            robot_node["position"],
+            human["position"]
         )
 
-        edge_index.append(
-
+        edge_index.extend([
+            [robot_index, human_index],
             [human_index, robot_index]
+        ])
 
-        )
-
-        edge_attr.append([d])
-
-        edge_attr.append([d])
+        edge_distances.extend([
+            [distance],
+            [distance]
+        ])
 
     ##################################################
-    # Human <-> Human
+    # Human ↔ Human
     ##################################################
 
-    for i in range(len(human_indices)):
+    for i in range(
+        len(human_indices)
+    ):
 
-        for j in range(i + 1, len(human_indices)):
+        for j in range(
+            i + 1,
+            len(human_indices)
+        ):
 
             h1 = human_indices[i]
-
             h2 = human_indices[j]
 
-            d = ((
-
-                node_positions[h1][0] -
-
-                node_positions[h2][0]
-
-            ) ** 2 + (
-
-                node_positions[h1][1] -
-
-                node_positions[h2][1]
-
-            ) ** 2 + (
-
-                node_positions[h1][2] -
-
-                node_positions[h2][2]
-
-            ) ** 2) ** 0.5
-
-            edge_index.append(
-
-                [h1, h2]
-
+            distance = compute_distance(
+                human_nodes[i]["position"],
+                human_nodes[j]["position"]
             )
 
-            edge_index.append(
-
+            edge_index.extend([
+                [h1, h2],
                 [h2, h1]
+            ])
 
-            )
-
-            edge_attr.append([d])
-
-            edge_attr.append([d])
+            edge_distances.extend([
+                [distance],
+                [distance]
+            ])
 
     ##################################################
-    # Tensor Conversion
+    # Edge Tensors
     ##################################################
 
-    x = torch.tensor(
+    if edge_index:
 
-        node_features,
+        graph.edge_index = torch.tensor(
+            edge_index,
+            dtype=torch.long
+        ).t().contiguous()
 
-        dtype=torch.float
+        graph.edge_attr = torch.tensor(
+            edge_distances,
+            dtype=torch.float32
+        )
+
+    else:
+
+        graph.edge_index = torch.empty(
+            (2, 0),
+            dtype=torch.long
+        )
+
+        graph.edge_attr = torch.empty(
+            (0, 1),
+            dtype=torch.float32
+        )
+
+    ##################################################
+    # Batch
+    ##################################################
+
+    total_nodes = (
+
+        2
+
+        + len(obstacle_nodes)
+
+        + len(human_nodes)
 
     )
 
-    edge_index = torch.tensor(
-
-        edge_index,
-
+    graph.batch = torch.zeros(
+        total_nodes,
         dtype=torch.long
-
-    ).t().contiguous()
-
-    edge_attr = torch.tensor(
-
-        edge_attr,
-
-        dtype=torch.float
-
     )
 
     ##################################################
-    # PyTorch Geometric Graph
+    # Return
     ##################################################
-
-    graph = Data(
-
-        x=x,
-        edge_index=edge_index,
-        edge_attr=edge_attr
-
-    )
 
     return graph
