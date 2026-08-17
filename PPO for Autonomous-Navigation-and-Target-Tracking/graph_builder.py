@@ -19,10 +19,8 @@ def encode_node(node_type, node):
     ##################################################
     # Robot
     #
-    # [x, y, z,
-    #  orientation,
-    #  linear_velocity,
-    #  angular_velocity]
+    # [x, y, z, orientation,
+    #  linear_velocity, angular_velocity]
     #
     # 6 features
     ##################################################
@@ -117,10 +115,10 @@ def compute_distance(position_1, position_2):
 
     return math.sqrt(
 
-        (position_1[0] - position_2[0]) ** 2
-        +
-        (position_1[1] - position_2[1]) ** 2
-        +
+        (position_1[0] - position_2[0]) ** 2 +
+
+        (position_1[1] - position_2[1]) ** 2 +
+
         (position_1[2] - position_2[2]) ** 2
 
     )
@@ -139,17 +137,6 @@ def build_graph(
 
 ):
 
-    ##################################################
-    # Node Lists
-    #
-    # Global ordering:
-    #
-    # 0       → Robot
-    # 1       → Goal
-    # 2...    → Obstacles
-    # ...     → Humans
-    ##################################################
-
     node_features = []
 
     node_types = []
@@ -159,6 +146,8 @@ def build_graph(
     ##################################################
     # Robot
     ##################################################
+
+    robot_index = 0
 
     node_features.append(
         encode_node(
@@ -173,11 +162,11 @@ def build_graph(
         robot_node["position"]
     )
 
-    robot_index = 0
-
     ##################################################
     # Goal
     ##################################################
+
+    goal_index = 1
 
     node_features.append(
         encode_node(
@@ -191,8 +180,6 @@ def build_graph(
     node_positions.append(
         target_node["position"]
     )
-
-    goal_index = 1
 
     ##################################################
     # Obstacles
@@ -245,7 +232,7 @@ def build_graph(
         )
 
     ##################################################
-    # Edge Construction
+    # Edges
     ##################################################
 
     edge_index = []
@@ -253,7 +240,7 @@ def build_graph(
     edge_attr = []
 
     ##################################################
-    # Robot ↔ Goal
+    # Robot <-> Goal
     ##################################################
 
     distance = compute_distance(
@@ -272,12 +259,10 @@ def build_graph(
     ])
 
     ##################################################
-    # Robot ↔ Obstacles
+    # Robot <-> Obstacles
     ##################################################
 
-    for i, obstacle in enumerate(
-        obstacle_nodes
-    ):
+    for i, obstacle in enumerate(obstacle_nodes):
 
         obstacle_index = obstacle_indices[i]
 
@@ -297,12 +282,10 @@ def build_graph(
         ])
 
     ##################################################
-    # Robot ↔ Humans
+    # Robot <-> Humans
     ##################################################
 
-    for i, human in enumerate(
-        human_nodes
-    ):
+    for i, human in enumerate(human_nodes):
 
         human_index = human_indices[i]
 
@@ -322,19 +305,15 @@ def build_graph(
         ])
 
     ##################################################
-    # Human ↔ Human
+    # Human <-> Human
     ##################################################
 
-    for i in range(
-        len(human_indices)
-    ):
+    for i in range(len(human_indices)):
 
-        for j in range(
-            i + 1,
-            len(human_indices)
-        ):
+        for j in range(i + 1, len(human_indices)):
 
             h1 = human_indices[i]
+
             h2 = human_indices[j]
 
             distance = compute_distance(
@@ -353,23 +332,16 @@ def build_graph(
             ])
 
     ##################################################
-    # Convert Node Features
-    #
-    # IMPORTANT:
-    #
-    # Raw node dimensions are different.
-    #
-    # Therefore we do NOT create x here.
-    #
-    # The GNN-specific encoders receive the
-    # node-type feature lists below.
-    ##################################################
-
-    ##################################################
-    # Store node-type information
+    # Create Graph
     ##################################################
 
     graph = Data()
+
+    ##################################################
+    # Raw Node Features
+    #
+    # These names MUST match gnn.py
+    ##################################################
 
     graph.robot_x = torch.tensor(
         [node_features[robot_index]],
@@ -380,10 +352,6 @@ def build_graph(
         [node_features[goal_index]],
         dtype=torch.float32
     )
-
-    ##################################################
-    # Obstacles
-    ##################################################
 
     if obstacle_indices:
 
@@ -401,10 +369,6 @@ def build_graph(
             (0, 2),
             dtype=torch.float32
         )
-
-    ##################################################
-    # Humans
-    ##################################################
 
     if human_indices:
 
@@ -424,7 +388,7 @@ def build_graph(
         )
 
     ##################################################
-    # Global Edge Index
+    # Edge Index
     ##################################################
 
     if edge_index:
@@ -452,14 +416,10 @@ def build_graph(
         )
 
     ##################################################
-    # Node Type Ordering
+    # Metadata
     ##################################################
 
     graph.node_types = node_types
-
-    ##################################################
-    # Number of Nodes
-    ##################################################
 
     graph.num_nodes = len(node_features)
 
@@ -471,9 +431,5 @@ def build_graph(
         graph.num_nodes,
         dtype=torch.long
     )
-
-    ##################################################
-    # Return
-    ##################################################
 
     return graph
