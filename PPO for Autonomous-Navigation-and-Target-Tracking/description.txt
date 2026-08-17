@@ -8,7 +8,7 @@ alternative trajectories. The result is a more reliable, data-efficient, and unc
 
 
 
-***Phase 2 is currently under submission to the International Conference on Robotics, Automation, and Artificial Intelligence 2026 (RAAI) that will be organized in Singapore***
+****Phase 2 is currently under submission to the International Conference on Robotics, Automation, and Artificial Intelligence 2026 (RAAI) that will be organized in Singapore****
 
 
 
