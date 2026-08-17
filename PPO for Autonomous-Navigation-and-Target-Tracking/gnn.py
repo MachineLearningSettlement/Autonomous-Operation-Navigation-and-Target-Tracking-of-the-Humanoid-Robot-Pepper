@@ -9,118 +9,314 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from torch_geometric.nn import (
-    SAGEConv,
+    GINEConv,
     global_mean_pool
 )
+
+
+##################################################
+# Pretrained GNN Path
+##################################################
 
 PRETRAINED_GNN_PATH = "./weights/pretrained_gnn.pth"
 
 
 ##################################################
-# GraphSAGE Network
+# Graph Neural Network
 ##################################################
 
 class GraphSAGE(nn.Module):
 
+    ##################################################
+    # Initialization
+    ##################################################
+
     def __init__(
-        self,
-        hidden_dim=128,
-        embedding_dim=128,
-        dropout=0.20
+
+            self,
+
+            hidden_dim=128,
+
+            embedding_dim=128,
+
+            edge_dim=128,
+
+            dropout=0.20
+
     ):
 
         super(GraphSAGE, self).__init__()
 
         ##################################################
-        # Node-Specific MLP Encoders
+        # Parameters
+        ##################################################
+
+        self.hidden_dim = hidden_dim
+
+        self.embedding_dim = embedding_dim
+
+        self.edge_dim = edge_dim
+
+        self.dropout = dropout
+
+        ##################################################
+        # Robot MLP
+        #
+        # 6 → 32 → 64 → 128
         ##################################################
 
         self.robot_encoder = nn.Sequential(
 
-            nn.Linear(6, 32),
-            nn.ReLU(),
-            
-            nn.Linear(32, 86),
+            nn.Linear(
+                6,
+                32
+            ),
+
             nn.ReLU(),
 
-            nn.Linear(86, 128),
+            nn.Linear(
+                32,
+                64
+            ),
+
+            nn.ReLU(),
+
+            nn.Linear(
+                64,
+                128
+            ),
+
             nn.ReLU()
 
         )
+
+        ##################################################
+        # Goal MLP
+        #
+        # 3 → 32 → 64 → 128
+        ##################################################
 
         self.goal_encoder = nn.Sequential(
 
-            nn.Linear(3, 32),
+            nn.Linear(
+                3,
+                32
+            ),
+
             nn.ReLU(),
 
-            nn.Linear(32, 86),
-            nn.ReLU()
+            nn.Linear(
+                32,
+                64
+            ),
 
-            nn.Linear(86, 128),
+            nn.ReLU(),
+
+            nn.Linear(
+                64,
+                128
+            ),
+
             nn.ReLU()
 
         )
+
+        ##################################################
+        # Obstacle MLP
+        #
+        # 2 → 16 → 32 → 128
+        ##################################################
 
         self.obstacle_encoder = nn.Sequential(
 
-            nn.Linear(2, 32),
-            nn.ReLU(),
-            
-            nn.Linear(32, 86),
-            nn.ReLU()
+            nn.Linear(
+                2,
+                16
+            ),
 
-            nn.Linear(86, 128),
+            nn.ReLU(),
+
+            nn.Linear(
+                16,
+                32
+            ),
+
+            nn.ReLU(),
+
+            nn.Linear(
+                32,
+                128
+            ),
+
             nn.ReLU()
 
         )
+
+        ##################################################
+        # Human MLP
+        #
+        # 1029 → 512 → 256 → 128
+        ##################################################
 
         self.human_encoder = nn.Sequential(
 
-            nn.Linear(1029, 464),
+            nn.Linear(
+                1029,
+                512
+            ),
+
             nn.ReLU(),
 
-            nn.Linear(464, 256),
-            nn.ReLU()
+            nn.Linear(
+                512,
+                256
+            ),
 
-            nn.Linear(256, 128),
+            nn.ReLU(),
+
+            nn.Linear(
+                256,
+                128
+            ),
+
             nn.ReLU()
 
         )
 
         ##################################################
-        # GraphSAGE Layers
+        # Edge MLP
+        #
+        # Distance:
+        #
+        # 1 → 32 → 64 → 128
         ##################################################
 
-        self.conv1 = SAGEConv(
-            128,
-            hidden_dim
+        self.edge_encoder = nn.Sequential(
+
+            nn.Linear(
+                1,
+                32
+            ),
+
+            nn.ReLU(),
+
+            nn.Linear(
+                32,
+                64
+            ),
+
+            nn.ReLU(),
+
+            nn.Linear(
+                64,
+                128
+            ),
+
+            nn.ReLU()
+
         )
 
-        self.conv2 = SAGEConv(
-            hidden_dim,
-            hidden_dim
+        ##################################################
+        # Edge-Aware GNN Layer 1
+        ##################################################
+
+        self.conv1 = GINEConv(
+
+            nn.Sequential(
+
+                nn.Linear(
+                    128,
+                    128
+                ),
+
+                nn.ReLU(),
+
+                nn.Linear(
+                    128,
+                    128
+                )
+
+            ),
+
+            edge_dim=128
+
         )
 
-        self.conv3 = SAGEConv(
-            hidden_dim,
-            embedding_dim
+        ##################################################
+        # Edge-Aware GNN Layer 2
+        ##################################################
+
+        self.conv2 = GINEConv(
+
+            nn.Sequential(
+
+                nn.Linear(
+                    128,
+                    128
+                ),
+
+                nn.ReLU(),
+
+                nn.Linear(
+                    128,
+                    128
+                )
+
+            ),
+
+            edge_dim=128
+
+        )
+
+        ##################################################
+        # Edge-Aware GNN Layer 3
+        ##################################################
+
+        self.conv3 = GINEConv(
+
+            nn.Sequential(
+
+                nn.Linear(
+                    128,
+                    128
+                ),
+
+                nn.ReLU(),
+
+                nn.Linear(
+                    128,
+                    128
+                )
+
+            ),
+
+            edge_dim=128
+
         )
 
         ##################################################
         # Batch Normalization
         ##################################################
 
-        self.bn1 = nn.BatchNorm1d(hidden_dim)
+        self.bn1 = nn.BatchNorm1d(
+            128
+        )
 
-        self.bn2 = nn.BatchNorm1d(hidden_dim)
+        self.bn2 = nn.BatchNorm1d(
+            128
+        )
 
-        self.bn3 = nn.BatchNorm1d(embedding_dim)
+        self.bn3 = nn.BatchNorm1d(
+            128
+        )
 
         ##################################################
         # Dropout
         ##################################################
 
-        self.drop = nn.Dropout(dropout)
+        self.drop = nn.Dropout(
+            p=dropout
+        )
 
         ##################################################
         # Graph Embedding Head
@@ -129,17 +325,19 @@ class GraphSAGE(nn.Module):
         self.graph_head = nn.Sequential(
 
             nn.Linear(
-                embedding_dim,
-                embedding_dim
+                128,
+                128
             ),
 
             nn.ReLU(),
 
-            nn.Dropout(dropout),
+            nn.Dropout(
+                p=dropout
+            ),
 
             nn.Linear(
-                embedding_dim,
-                embedding_dim
+                128,
+                128
             )
 
         )
@@ -148,124 +346,246 @@ class GraphSAGE(nn.Module):
     # Encode Nodes
     ##################################################
 
-    def encode_nodes(self, data):
+    def encode_nodes(
+
+            self,
+
+            data
+
+    ):
+
+        ##################################################
+        # Robot
+        ##################################################
 
         robot_x = self.robot_encoder(
+
             data["robot"].x
+
         )
+
+        ##################################################
+        # Goal
+        ##################################################
 
         goal_x = self.goal_encoder(
+
             data["goal"].x
+
         )
+
+        ##################################################
+        # Obstacles
+        ##################################################
 
         obstacle_x = self.obstacle_encoder(
+
             data["obstacle"].x
+
         )
+
+        ##################################################
+        # Humans
+        ##################################################
 
         human_x = self.human_encoder(
+
             data["human"].x
+
         )
 
-        return (
-            robot_x,
-            goal_x,
-            obstacle_x,
-            human_x
+        ##################################################
+        # Combine All Node Embeddings
+        ##################################################
+
+        x = torch.cat(
+
+            [
+
+                robot_x,
+
+                goal_x,
+
+                obstacle_x,
+
+                human_x
+
+            ],
+
+            dim=0
+
         )
+
+        return x
+
+    ##################################################
+    # Encode Edges
+    ##################################################
+
+    def encode_edges(
+
+            self,
+
+            data
+
+    ):
+
+        ##################################################
+        # Raw Edge Distance
+        ##################################################
+
+        edge_attr = data.edge_attr
+
+        ##################################################
+        # Edge MLP
+        ##################################################
+
+        edge_attr = self.edge_encoder(
+
+            edge_attr
+
+        )
+
+        return edge_attr
 
     ##################################################
     # Forward
     ##################################################
 
-    def forward(self, data):
+    def forward(
+
+            self,
+
+            data
+
+    ):
 
         ##################################################
-        # Node Encoding
+        # Node Embeddings
         ##################################################
 
-        (
-            robot_x,
-            goal_x,
-            obstacle_x,
-            human_x
-        ) = self.encode_nodes(data)
+        x = self.encode_nodes(
 
-        ##################################################
-        # Combine Encoded Nodes
-        ##################################################
+            data
 
-        x = torch.cat(
-            [
-                robot_x,
-                goal_x,
-                obstacle_x,
-                human_x
-            ],
-            dim=0
         )
 
         ##################################################
-        # Graph Edges
+        # Edge Embeddings
+        ##################################################
+
+        edge_attr = self.encode_edges(
+
+            data
+
+        )
+
+        ##################################################
+        # Edge Connections
         ##################################################
 
         edge_index = data.edge_index
 
         ##################################################
-        # Batch
-        ##################################################
-
-        batch = data.batch
-
-        ##################################################
-        # GraphSAGE Layer 1
+        # First GNN Layer
         ##################################################
 
         x = self.conv1(
+
             x,
-            edge_index
+
+            edge_index,
+
+            edge_attr
+
         )
 
-        x = self.bn1(x)
+        x = self.bn1(
 
-        x = F.relu(x)
+            x
 
-        x = self.drop(x)
+        )
+
+        x = F.relu(
+
+            x
+
+        )
+
+        x = self.drop(
+
+            x
+
+        )
 
         ##################################################
-        # GraphSAGE Layer 2
+        # Second GNN Layer
         ##################################################
 
         x = self.conv2(
+
             x,
-            edge_index
+
+            edge_index,
+
+            edge_attr
+
         )
 
-        x = self.bn2(x)
+        x = self.bn2(
 
-        x = F.relu(x)
+            x
 
-        x = self.drop(x)
+        )
+
+        x = F.relu(
+
+            x
+
+        )
+
+        x = self.drop(
+
+            x
+
+        )
 
         ##################################################
-        # GraphSAGE Layer 3
+        # Third GNN Layer
         ##################################################
 
         x = self.conv3(
+
             x,
-            edge_index
+
+            edge_index,
+
+            edge_attr
+
         )
 
-        x = self.bn3(x)
+        x = self.bn3(
 
-        x = F.relu(x)
+            x
+
+        )
+
+        x = F.relu(
+
+            x
+
+        )
 
         ##################################################
         # Global Mean Pooling
         ##################################################
 
         graph_embedding = global_mean_pool(
+
             x,
-            batch
+
+            data.batch
+
         )
 
         ##################################################
@@ -273,7 +593,9 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         graph_embedding = self.graph_head(
+
             graph_embedding
+
         )
 
         ##################################################
@@ -281,36 +603,71 @@ class GraphSAGE(nn.Module):
         ##################################################
 
         graph_embedding = F.normalize(
+
             graph_embedding,
+
             p=2,
+
             dim=1
+
         )
+
+        ##################################################
+        # Output
+        ##################################################
 
         return graph_embedding
 
     ##################################################
-    # Load Pretrained GraphSAGE
+    # Load Pretrained GNN
     ##################################################
 
     def load_pretrained(
-        self,
-        device="cpu"
+
+            self,
+
+            device="cpu"
+
     ):
 
+        ##################################################
+        # Load Checkpoint
+        ##################################################
+
         checkpoint = torch.load(
+
             PRETRAINED_GNN_PATH,
+
             map_location=device
+
         )
 
+        ##################################################
+        # Load Parameters
+        ##################################################
+
         self.load_state_dict(
+
             checkpoint
+
         )
+
+        ##################################################
+        # Evaluation Mode
+        ##################################################
 
         self.eval()
 
+        ##################################################
+        # Freeze Parameters
+        ##################################################
+
         for parameter in self.parameters():
+
             parameter.requires_grad = False
 
         print(
-            "\nPretrained GraphSAGE loaded successfully."
+
+            "\nPretrained GNN loaded successfully."
+
         )
