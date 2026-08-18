@@ -679,6 +679,7 @@ class PepperEnvironment:
 
     ##################################################
     # YOLO Pose → Halpe-26
+    # YOLO Pose → COCO-17 → Halpe-26 → official MotionBERT → H36M 17×3D → 1020-D human feature → GNN.
     ##################################################
 
     def coco17_to_halpe26(
