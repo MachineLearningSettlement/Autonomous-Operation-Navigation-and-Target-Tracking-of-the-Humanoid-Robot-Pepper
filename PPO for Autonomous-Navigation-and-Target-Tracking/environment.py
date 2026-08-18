@@ -1,3 +1,4 @@
+```python
 #!/usr/bin/env python3
 
 ##################################################
@@ -6,13 +7,15 @@
 
 import os
 import cv2
+import json
 import math
 import random
+import subprocess
+import tempfile
+
 import numpy as np
 import torch
 import rospy
-
-from PIL import Image
 
 from transformers import (
     AutoImageProcessor,
@@ -24,15 +27,9 @@ from ultralytics import YOLO
 
 from cv_bridge import CvBridge
 
-from geometry_msgs.msg import (
-    Twist,
-    Pose
-)
+from geometry_msgs.msg import Twist, Pose
 
-from sensor_msgs.msg import (
-    LaserScan,
-    Image as ROSImage
-)
+from sensor_msgs.msg import LaserScan, Image as ROSImage
 
 from nav_msgs.msg import Odometry
 
@@ -75,10 +72,6 @@ class PepperEnvironment:
 
     def __init__(self, training=True):
 
-        ##################################################
-        # Mode
-        ##################################################
-
         self.training = training
 
         ##################################################
@@ -86,17 +79,14 @@ class PepperEnvironment:
         ##################################################
 
         self.robot_pose = Pose()
-
         self.goal_pose = Pose()
 
         self.yaw = 0.0
 
         self.linear_velocity = 0.0
-
         self.angular_velocity = 0.0
 
         self.previous_linear_velocity = 0.0
-
         self.previous_angular_velocity = 0.0
 
         self.previous_distance = 0.0
@@ -106,23 +96,21 @@ class PepperEnvironment:
         ##################################################
 
         self.current_step = 0
-
         self.max_steps = 500
 
-        self.goal_threshold = 0.20 if training else 0.40
+        self.goal_threshold = (
+            0.20 if training else 0.40
+        )
 
         ##################################################
-        # Reward Parameters
+        # Reward
         ##################################################
 
         self.Rg = 100.0
-
         self.Rf = 100.0
 
         self.lambda_p = 35.0
-
         self.lambda_d = 8.0
-
         self.lambda_s = 10.0
 
         ##################################################
@@ -134,7 +122,7 @@ class PepperEnvironment:
         self.current_frame = None
 
         ##################################################
-        # Video Buffer
+        # 20-Frame Video Buffer
         ##################################################
 
         self.video_buffer = []
@@ -148,28 +136,29 @@ class PepperEnvironment:
         self.device = torch.device(
             "cuda"
             if torch.cuda.is_available()
-            else
-            "cpu"
+            else "cpu"
         )
 
         ##################################################
         # VideoMAE
         ##################################################
 
-        self.video_processor = AutoImageProcessor.from_pretrained(
-            "MCG-NJU/videomae-base"
+        self.video_processor = (
+            AutoImageProcessor.from_pretrained(
+                "MCG-NJU/videomae-base"
+            )
         )
 
-        self.video_model = VideoMAEModel.from_pretrained(
-            "MCG-NJU/videomae-base"
-        ).to(
-            self.device
+        self.video_model = (
+            VideoMAEModel.from_pretrained(
+                "MCG-NJU/videomae-base"
+            ).to(self.device)
         )
 
         self.video_model.eval()
 
         ##################################################
-        # TimeSformer + IMU Regression Model
+        # TimeSformer + IMU Regression
         ##################################################
 
         self.imu_model_path = os.path.join(
@@ -177,32 +166,48 @@ class PepperEnvironment:
             "timesformer_imu_regressor.pt"
         )
 
-        self.imu_processor = AutoImageProcessor.from_pretrained(
-            "facebook/timesformer-hr-finetuned-k400"
+        self.imu_processor = (
+            AutoImageProcessor.from_pretrained(
+                "facebook/timesformer-hr-finetuned-k400"
+            )
         )
 
-        self.imu_timesformer = TimesformerModel.from_pretrained(
-            "facebook/timesformer-hr-finetuned-k400"
-        ).to(self.device)
+        self.imu_timesformer = (
+            TimesformerModel.from_pretrained(
+                "facebook/timesformer-hr-finetuned-k400"
+            ).to(self.device)
+        )
 
         self.imu_timesformer.eval()
 
         self.imu_regression_head = torch.nn.Sequential(
-            torch.nn.Linear(self.imu_timesformer.config.hidden_size, 512),
+
+            torch.nn.Linear(
+                self.imu_timesformer.config.hidden_size,
+                512
+            ),
+
             torch.nn.LayerNorm(512),
             torch.nn.GELU(),
             torch.nn.Dropout(0.20),
+
             torch.nn.Linear(512, 256),
+
             torch.nn.LayerNorm(256),
             torch.nn.GELU(),
             torch.nn.Dropout(0.20),
+
             torch.nn.Linear(256, 128),
+
             torch.nn.LayerNorm(128),
             torch.nn.GELU(),
             torch.nn.Dropout(0.10),
+
             torch.nn.Linear(128, 64),
             torch.nn.GELU(),
+
             torch.nn.Linear(64, 6)
+
         ).to(self.device)
 
         checkpoint = torch.load(
@@ -213,12 +218,21 @@ class PepperEnvironment:
         state_dict = checkpoint["model_state_dict"]
 
         regression_head_state = {
-            key.replace("regression_head.", ""): value
+            key.replace(
+                "regression_head.",
+                ""
+            ): value
+
             for key, value in state_dict.items()
-            if key.startswith("regression_head.")
+
+            if key.startswith(
+                "regression_head."
+            )
         }
 
-        self.imu_regression_head.load_state_dict(regression_head_state)
+        self.imu_regression_head.load_state_dict(
+            regression_head_state
+        )
 
         for parameter in self.imu_timesformer.parameters():
             parameter.requires_grad = False
@@ -229,11 +243,70 @@ class PepperEnvironment:
         self.imu_regression_head.eval()
 
         ##################################################
-        # YOLOv11 Human Detector
+        # YOLO Human Detector
         ##################################################
 
         self.human_detector = YOLO(
             "yolo11n.pt"
+        )
+
+        ##################################################
+        # YOLO Pose Detector
+        ##################################################
+
+        self.human_pose_detector = YOLO(
+            "yolo11n-pose.pt"
+        )
+
+        ##################################################
+        # MotionBERT
+        #
+        # Official repository:
+        #
+        # MotionBERT/
+        #   infer_wild.py
+        #   configs/
+        #   checkpoint/
+        #
+        ##################################################
+
+        self.motionbert_root = os.path.join(
+            os.path.dirname(
+                os.path.realpath(__file__)
+            ),
+            "MotionBERT"
+        )
+
+        self.motionbert_infer = os.path.join(
+            self.motionbert_root,
+            "infer_wild.py"
+        )
+
+        self.motionbert_config = os.path.join(
+            self.motionbert_root,
+            "configs",
+            "pose3d",
+            "MB_ft_h36m.yaml"
+        )
+
+        ##################################################
+        # Fine-tuned H36M checkpoint
+        #
+        # Generated by:
+        #
+        # MB_release
+        #       ↓
+        # MB_ft_h36m.yaml
+        #       ↓
+        # FT_MB_release_MB_ft_h36m
+        ##################################################
+
+        self.motionbert_checkpoint = os.path.join(
+            self.motionbert_root,
+            "checkpoint",
+            "pose3d",
+            "FT_MB_release_MB_ft_h36m",
+            "best_epoch.bin"
         )
 
         ##################################################
@@ -253,7 +326,6 @@ class PepperEnvironment:
         ##################################################
 
         self.training_targets = []
-
         self.last_target = None
 
         ##################################################
@@ -322,8 +394,15 @@ class PepperEnvironment:
         qw = orientation.w
 
         self.yaw = math.atan2(
-            2.0 * (qw * qz + qx * qy),
-            1.0 - 2.0 * (qy * qy + qz * qz)
+            2.0 * (
+                qw * qz +
+                qx * qy
+            ),
+            1.0 -
+            2.0 * (
+                qy * qy +
+                qz * qz
+            )
         )
 
     ##################################################
@@ -333,6 +412,7 @@ class PepperEnvironment:
     def camera_callback(self, msg):
 
         try:
+
             frame = self.bridge.imgmsg_to_cv2(
                 msg,
                 desired_encoding="bgr8"
@@ -341,30 +421,35 @@ class PepperEnvironment:
             self.current_frame = frame
 
             ##################################################
-            # Update Video Buffer
+            # Store Camera Frame
             ##################################################
 
             self.video_buffer.append(frame)
 
             if len(self.video_buffer) > self.clip_length:
+
                 self.video_buffer.pop(0)
 
         except Exception as e:
-            rospy.logwarn(e)
+
+            rospy.logwarn(
+                str(e)
+            )
 
     ##################################################
-    # Capture Current Video Clip
+    # Capture Video Clip
     ##################################################
 
     def capture_video_clip(self):
 
         if len(self.video_buffer) < self.clip_length:
+
             return None
 
         return self.video_buffer.copy()
 
     ##################################################
-    # Load Positive / Negative Database
+    # Load Database
     ##################################################
 
     def load_database(self, folder):
@@ -372,15 +457,16 @@ class PepperEnvironment:
         database = []
 
         if not os.path.exists(folder):
-            rospy.logwarn(f"{folder} not found.")
+
+            rospy.logwarn(
+                f"{folder} not found."
+            )
+
             return database
 
-        ##################################################
-        # Compute VideoMAE embedding
-        # only once for every video
-        ##################################################
-
-        for filename in sorted(os.listdir(folder)):
+        for filename in sorted(
+            os.listdir(folder)
+        ):
 
             path = os.path.join(
                 folder,
@@ -388,14 +474,20 @@ class PepperEnvironment:
             )
 
             if not os.path.isfile(path):
+
                 continue
 
-            embedding = self.compute_video_embedding(
-                path
+            embedding = (
+                self.compute_video_embedding(
+                    path
+                )
             )
 
             if embedding is not None:
-                database.append(embedding)
+
+                database.append(
+                    embedding
+                )
 
         rospy.loginfo(
             f"{len(database)} videos loaded from {folder}"
@@ -404,18 +496,22 @@ class PepperEnvironment:
         return database
 
     ##################################################
-    # Compute Video Embedding
+    # VideoMAE Embedding
     ##################################################
 
-    def compute_video_embedding(self, video_source):
+    def compute_video_embedding(
+            self,
+            video_source
+    ):
 
-        ##################################################
-        # Read Frames
-        ##################################################
+        if isinstance(
+            video_source,
+            str
+        ):
 
-        if isinstance(video_source, str):
-
-            cap = cv2.VideoCapture(video_source)
+            cap = cv2.VideoCapture(
+                video_source
+            )
 
             frames = []
 
@@ -448,16 +544,9 @@ class PepperEnvironment:
 
                 frames.append(frame)
 
-        ##################################################
-        # Enough Frames ?
-        ##################################################
-
         if len(frames) < self.clip_length:
-            return None
 
-        ##################################################
-        # Uniform Sampling
-        ##################################################
+            return None
 
         indices = np.linspace(
             0,
@@ -471,22 +560,15 @@ class PepperEnvironment:
             for i in indices
         ]
 
-        ##################################################
-        # VideoMAE Preprocessing
-        ##################################################
-
         inputs = self.video_processor(
             sampled_frames,
             return_tensors="pt"
         )
 
-        pixel_values = inputs["pixel_values"].to(
-            self.device
+        pixel_values = (
+            inputs["pixel_values"]
+            .to(self.device)
         )
-
-        ##################################################
-        # VideoMAE Forward
-        ##################################################
 
         with torch.no_grad():
 
@@ -494,27 +576,37 @@ class PepperEnvironment:
                 pixel_values
             )
 
-            embedding = outputs.last_hidden_state.mean(
-                dim=1
+            embedding = (
+                outputs.last_hidden_state
+                .mean(dim=1)
             )
 
-            embedding = embedding / embedding.norm(
-                dim=1,
-                keepdim=True
+            embedding = (
+                embedding /
+                embedding.norm(
+                    dim=1,
+                    keepdim=True
+                )
             )
 
         return embedding.squeeze(0)
 
     ##################################################
-    # Predict Human IMU Features
+    # TimeSformer → IMU
     ##################################################
 
     def predict_human_imu(self):
 
         if len(self.video_buffer) < self.clip_length:
-            return np.zeros(6, dtype=np.float32)
 
-        frames = self.video_buffer[-self.clip_length:]
+            return np.zeros(
+                6,
+                dtype=np.float32
+            )
+
+        frames = self.video_buffer[
+            -self.clip_length:
+        ]
 
         indices = np.linspace(
             0,
@@ -524,8 +616,14 @@ class PepperEnvironment:
         )
 
         sampled_frames = [
-            cv2.cvtColor(frames[i], cv2.COLOR_BGR2RGB)
+
+            cv2.cvtColor(
+                frames[i],
+                cv2.COLOR_BGR2RGB
+            )
+
             for i in indices
+
         ]
 
         inputs = self.imu_processor(
@@ -533,17 +631,35 @@ class PepperEnvironment:
             return_tensors="pt"
         )
 
-        pixel_values = inputs["pixel_values"].to(self.device)
+        pixel_values = (
+            inputs["pixel_values"]
+            .to(self.device)
+        )
 
         with torch.no_grad():
+
             outputs = self.imu_timesformer(
                 pixel_values=pixel_values
             )
 
-            embedding = outputs.last_hidden_state.mean(dim=1)
-            imu_prediction = self.imu_regression_head(embedding)
+            embedding = (
+                outputs.last_hidden_state
+                .mean(dim=1)
+            )
 
-        return imu_prediction.squeeze(0).cpu().numpy()
+            imu_prediction = (
+                self.imu_regression_head(
+                    embedding
+                )
+            )
+
+        return (
+            imu_prediction
+            .squeeze(0)
+            .cpu()
+            .numpy()
+            .astype(np.float32)
+        )
 
     ##################################################
     # Human Detection
@@ -557,14 +673,495 @@ class PepperEnvironment:
         )
 
         for result in results:
+
             for box in result.boxes:
+
                 if int(box.cls) == 0:
+
                     return True
 
         return False
 
     ##################################################
-    # Compare With Database
+    # YOLO Pose → Halpe-26
+    #
+    # MotionBERT's wild loader expects
+    # Halpe-26 keypoints and internally
+    # converts them to H36M 17 joints.
+    ##################################################
+
+    def coco17_to_halpe26(
+            self,
+            coco
+    ):
+
+        output = np.zeros(
+            (26, 3),
+            dtype=np.float32
+        )
+
+        ##################################################
+        # COCO-17
+        #
+        # 0 nose
+        # 1 left eye
+        # 2 right eye
+        # 3 left ear
+        # 4 right ear
+        # 5 left shoulder
+        # 6 right shoulder
+        # 7 left elbow
+        # 8 right elbow
+        # 9 left wrist
+        # 10 right wrist
+        # 11 left hip
+        # 12 right hip
+        # 13 left knee
+        # 14 right knee
+        # 15 left ankle
+        # 16 right ankle
+        ##################################################
+
+        output[0] = coco[0]
+        output[1] = coco[1]
+        output[2] = coco[2]
+        output[3] = coco[3]
+        output[4] = coco[4]
+
+        output[5] = coco[5]
+        output[6] = coco[6]
+
+        output[7] = coco[7]
+        output[8] = coco[8]
+
+        output[9] = coco[9]
+        output[10] = coco[10]
+
+        output[11] = coco[11]
+        output[12] = coco[12]
+
+        output[13] = coco[13]
+        output[14] = coco[14]
+
+        output[15] = coco[15]
+        output[16] = coco[16]
+
+        ##################################################
+        # Head
+        ##################################################
+
+        output[17] = (
+            coco[1] +
+            coco[2]
+        ) * 0.5
+
+        ##################################################
+        # Neck
+        ##################################################
+
+        output[18] = (
+            coco[5] +
+            coco[6]
+        ) * 0.5
+
+        ##################################################
+        # Hip
+        ##################################################
+
+        output[19] = (
+            coco[11] +
+            coco[12]
+        ) * 0.5
+
+        ##################################################
+        # Toes / Heels
+        #
+        # Derived from ankle positions.
+        ##################################################
+
+        output[20] = coco[15]
+        output[21] = coco[16]
+
+        output[22] = coco[15]
+        output[23] = coco[16]
+
+        output[24] = coco[15]
+        output[25] = coco[16]
+
+        return output
+
+    ##################################################
+    # Extract 2D Pose Sequence
+    ##################################################
+
+    def extract_motionbert_pose(self):
+
+        if len(self.video_buffer) < self.clip_length:
+
+            return None, None
+
+        frames = self.video_buffer[
+            -self.clip_length:
+        ]
+
+        pose_sequence = []
+
+        selected_person = None
+
+        for frame_id, frame in enumerate(frames):
+
+            results = self.human_pose_detector(
+                frame,
+                verbose=False
+            )
+
+            best_person = None
+            best_confidence = -1.0
+
+            for result in results:
+
+                if result.keypoints is None:
+                    continue
+
+                if result.keypoints.xy is None:
+                    continue
+
+                keypoints = (
+                    result.keypoints.xy
+                    .cpu()
+                    .numpy()
+                )
+
+                if len(keypoints) == 0:
+                    continue
+
+                if result.boxes is not None:
+
+                    confidences = (
+                        result.boxes.conf
+                        .cpu()
+                        .numpy()
+                    )
+
+                    person_id = int(
+                        np.argmax(
+                            confidences
+                        )
+                    )
+
+                    confidence = float(
+                        confidences[person_id]
+                    )
+
+                else:
+
+                    person_id = 0
+                    confidence = 1.0
+
+                if confidence > best_confidence:
+
+                    best_confidence = confidence
+
+                    best_person = (
+                        keypoints[person_id]
+                    )
+
+            ##################################################
+            # No person in this frame
+            ##################################################
+
+            if best_person is None:
+
+                if selected_person is None:
+
+                    return None, None
+
+                best_person = selected_person.copy()
+
+            else:
+
+                selected_person = (
+                    best_person.copy()
+                )
+
+            ##################################################
+            # YOLO gives COCO-17 XY
+            ##################################################
+
+            coco17 = np.zeros(
+                (17, 3),
+                dtype=np.float32
+            )
+
+            coco17[:, :2] = (
+                best_person[:, :2]
+            )
+
+            coco17[:, 2] = 1.0
+
+            ##################################################
+            # Convert COCO-17 → Halpe-26
+            ##################################################
+
+            halpe26 = (
+                self.coco17_to_halpe26(
+                    coco17
+                )
+            )
+
+            ##################################################
+            # MotionBERT JSON format
+            ##################################################
+
+            pose_sequence.append({
+
+                "image_id": frame_id,
+
+                "idx": 0,
+
+                "keypoints":
+                    halpe26.reshape(-1).tolist()
+
+            })
+
+        if len(pose_sequence) != self.clip_length:
+
+            return None, None
+
+        return pose_sequence, frames
+
+    ##################################################
+    # MotionBERT 2D → 3D
+    ##################################################
+
+    def predict_motionbert(self):
+
+        zero_motion = np.zeros(
+            20 * 17 * 3,
+            dtype=np.float32
+        )
+
+        pose_sequence, frames = (
+            self.extract_motionbert_pose()
+        )
+
+        if pose_sequence is None:
+
+            return zero_motion
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+
+            ##################################################
+            # Temporary video
+            ##################################################
+
+            video_path = os.path.join(
+                temp_dir,
+                "human_clip.mp4"
+            )
+
+            ##################################################
+            # Temporary AlphaPose JSON
+            ##################################################
+
+            json_path = os.path.join(
+                temp_dir,
+                "alphapose-results.json"
+            )
+
+            ##################################################
+            # MotionBERT output
+            ##################################################
+
+            output_dir = os.path.join(
+                temp_dir,
+                "motionbert_output"
+            )
+
+            os.makedirs(
+                output_dir,
+                exist_ok=True
+            )
+
+            ##################################################
+            # Write 20-frame video
+            ##################################################
+
+            height, width = frames[0].shape[:2]
+
+            writer = cv2.VideoWriter(
+                video_path,
+                cv2.VideoWriter_fourcc(
+                    *"mp4v"
+                ),
+                10,
+                (width, height)
+            )
+
+            for frame in frames:
+
+                writer.write(frame)
+
+            writer.release()
+
+            ##################################################
+            # Write JSON
+            ##################################################
+
+            with open(
+                json_path,
+                "w"
+            ) as f:
+
+                json.dump(
+                    pose_sequence,
+                    f
+                )
+
+            ##################################################
+            # Official MotionBERT inference
+            ##################################################
+
+            command = [
+
+                "python",
+
+                self.motionbert_infer,
+
+                "--config",
+                self.motionbert_config,
+
+                "--evaluate",
+                self.motionbert_checkpoint,
+
+                "--json_path",
+                json_path,
+
+                "--vid_path",
+                video_path,
+
+                "--out_path",
+                output_dir,
+
+                "--clip_len",
+                "20"
+
+            ]
+
+            try:
+
+                subprocess.run(
+                    command,
+                    cwd=self.motionbert_root,
+                    check=True
+                )
+
+            except Exception as e:
+
+                rospy.logwarn(
+                    f"MotionBERT inference failed: {e}"
+                )
+
+                return zero_motion
+
+            ##################################################
+            # Official output = X3D.npy
+            ##################################################
+
+            output_file = os.path.join(
+                output_dir,
+                "X3D.npy"
+            )
+
+            if not os.path.exists(
+                output_file
+            ):
+
+                rospy.logwarn(
+                    "MotionBERT X3D.npy not found."
+                )
+
+                return zero_motion
+
+            pose_3d = np.load(
+                output_file
+            )
+
+            pose_3d = np.asarray(
+                pose_3d,
+                dtype=np.float32
+            )
+
+            ##################################################
+            # Expected:
+            #
+            # [1, T, 17, 3]
+            # or
+            # [T, 17, 3]
+            ##################################################
+
+            if pose_3d.ndim == 4:
+
+                pose_3d = pose_3d[0]
+
+            if pose_3d.ndim != 3:
+
+                return zero_motion
+
+            ##################################################
+            # Keep last 20 frames
+            ##################################################
+
+            if pose_3d.shape[0] >= 20:
+
+                pose_3d = pose_3d[-20:]
+
+            else:
+
+                padding = np.repeat(
+                    pose_3d[-1:],
+                    20 - pose_3d.shape[0],
+                    axis=0
+                )
+
+                pose_3d = np.concatenate(
+                    [
+                        pose_3d,
+                        padding
+                    ],
+                    axis=0
+                )
+
+            ##################################################
+            # 20 × 17 × 3
+            ##################################################
+
+            pose_3d = pose_3d[
+                :20,
+                :17,
+                :3
+            ]
+
+            if pose_3d.shape != (
+                20,
+                17,
+                3
+            ):
+
+                return zero_motion
+
+            ##################################################
+            # 1020-D MotionBERT representation
+            ##################################################
+
+            return pose_3d.reshape(
+                -1
+            ).astype(
+                np.float32
+            )
+
+    ##################################################
+    # Compare Database
     ##################################################
 
     def compare_database(
@@ -574,15 +1171,19 @@ class PepperEnvironment:
     ):
 
         if current_embedding is None:
+
             return 0.0
 
         similarities = []
 
         for reference_embedding in database:
 
-            similarity = torch.nn.functional.cosine_similarity(
-                current_embedding.unsqueeze(0),
-                reference_embedding.unsqueeze(0)
+            similarity = (
+                torch.nn.functional
+                .cosine_similarity(
+                    current_embedding.unsqueeze(0),
+                    reference_embedding.unsqueeze(0)
+                )
             )
 
             similarities.append(
@@ -590,65 +1191,54 @@ class PepperEnvironment:
             )
 
         if len(similarities) == 0:
+
             return 0.0
 
         return max(similarities)
 
     ##################################################
-    # Compute Social Similarity
+    # Social Similarity
     ##################################################
 
     def compute_social_similarity(self):
 
-        ##################################################
-        # Current Video
-        ##################################################
-
-        current_video = self.capture_video_clip()
+        current_video = (
+            self.capture_video_clip()
+        )
 
         if current_video is None:
+
             return 0.0, 0.0, False
 
-        ##################################################
-        # Human Detection
-        ##################################################
-
-        human_detected = self.detect_humans(
-            current_video[-1]
+        human_detected = (
+            self.detect_humans(
+                current_video[-1]
+            )
         )
 
         if not human_detected:
+
             return 0.0, 0.0, False
 
-        ##################################################
-        # Video Embedding
-        ##################################################
-
-        current_embedding = self.compute_video_embedding(
-            current_video
+        current_embedding = (
+            self.compute_video_embedding(
+                current_video
+            )
         )
 
-        ##################################################
-        # Positive Similarity
-        ##################################################
-
-        positive_similarity = self.compare_database(
-            current_embedding,
-            self.positive_database
+        positive_similarity = (
+            self.compare_database(
+                current_embedding,
+                self.positive_database
+            )
         )
 
-        ##################################################
-        # Negative Similarity
-        ##################################################
-
-        negative_similarity = self.compare_database(
-            current_embedding,
-            self.negative_database
+        negative_similarity = (
+            self.compare_database(
+                current_embedding,
+                self.negative_database
+            )
         )
-
-        ##################################################
-        # Return
-        ##################################################
 
         return (
             positive_similarity,
@@ -660,20 +1250,30 @@ class PepperEnvironment:
     # Build Graph State
     ##################################################
 
-    def build_state_graph(self, laser_scan):
+    def build_state_graph(
+            self,
+            laser_scan
+    ):
 
         ##################################################
         # Robot Node
         ##################################################
 
         robot_node = {
+
             "position": [
                 self.robot_pose.position.x,
                 self.robot_pose.position.y
             ],
+
             "orientation": self.yaw,
-            "linear_velocity": self.linear_velocity,
-            "angular_velocity": self.angular_velocity
+
+            "linear_velocity":
+                self.linear_velocity,
+
+            "angular_velocity":
+                self.angular_velocity
+
         }
 
         ##################################################
@@ -681,10 +1281,12 @@ class PepperEnvironment:
         ##################################################
 
         target_node = {
+
             "position": [
                 self.goal_pose.position.x,
                 self.goal_pose.position.y
             ]
+
         }
 
         ##################################################
@@ -695,25 +1297,45 @@ class PepperEnvironment:
 
         angle = laser_scan.angle_min
 
-        min_obstacle_distance = float("inf")
+        min_obstacle_distance = float(
+            "inf"
+        )
 
         for distance in laser_scan.ranges:
 
-            if np.isinf(distance) or np.isnan(distance):
-                angle += laser_scan.angle_increment
+            if (
+                np.isinf(distance) or
+                np.isnan(distance)
+            ):
+
+                angle += (
+                    laser_scan.angle_increment
+                )
+
                 continue
 
-            x = self.robot_pose.position.x + distance * math.cos(
-                self.yaw + angle
-            )
-
-            y = self.robot_pose.position.y + distance * math.sin(
-                self.yaw + angle
-            )
-
             obstacle_nodes.append({
-                "position": [x, y],
-                "distance": distance
+
+                "position": [
+                    self.robot_pose.position.x +
+                    distance *
+                    math.cos(
+                        self.yaw + angle
+                    ),
+
+                    self.robot_pose.position.y +
+                    distance *
+                    math.sin(
+                        self.yaw + angle
+                    )
+                ],
+
+                "distance": distance,
+
+                "orientation": (
+                    self.yaw + angle
+                )
+
             })
 
             min_obstacle_distance = min(
@@ -721,7 +1343,9 @@ class PepperEnvironment:
                 distance
             )
 
-            angle += laser_scan.angle_increment
+            angle += (
+                laser_scan.angle_increment
+            )
 
         ##################################################
         # Human Nodes
@@ -729,289 +1353,416 @@ class PepperEnvironment:
 
         human_nodes = []
 
-        ##################################################
-        # Human Motion / IMU Features
-        ##################################################
-
-        imu_features = np.zeros(
-            6,
-            dtype=np.float32
-        )
+        human_detected = False
 
         if self.current_frame is not None:
 
-            results = self.human_detector(
+            results = self.human_pose_detector(
                 self.current_frame,
                 verbose=False
             )
 
-            human_detected = False
-
             for result in results:
-                for box in result.boxes:
 
-                    if int(box.cls) != 0:
-                        continue
+                if result.keypoints is None:
+                    continue
 
-                    ##################################################
-                    # Human Detected
-                    ##################################################
+                if result.keypoints.xy is None:
+                    continue
 
-                    human_detected = True
+                keypoints = (
+                    result.keypoints.xy
+                    .cpu()
+                    .numpy()
+                )
 
-                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                if len(keypoints) == 0:
+                    continue
 
-                    cx = (x1 + x2) / 2.0
+                ##################################################
+                # Select highest-confidence person
+                ##################################################
 
-                    cy = (y1 + y2) / 2.0
+                if result.boxes is not None:
 
-                    ##################################################
-                    # Approximate Human Position
-                    ##################################################
+                    confidences = (
+                        result.boxes.conf
+                        .cpu()
+                        .numpy()
+                    )
 
-                    human_nodes.append({
-                        "position": [cx, cy]
-                    })
+                    person_id = int(
+                        np.argmax(
+                            confidences
+                        )
+                    )
 
-            ##################################################
-            # Predict IMU Only If Human Is Present
-            ##################################################
+                else:
 
-            if human_detected:
-                imu_features = self.predict_human_imu()
+                    person_id = 0
+
+                person = keypoints[
+                    person_id
+                ]
+
+                ##################################################
+                # Human detected
+                ##################################################
+
+                human_detected = True
+
+                ##################################################
+                # Image-space human position
+                ##################################################
+
+                cx = float(
+                    np.mean(
+                        person[:, 0]
+                    )
+                )
+
+                cy = float(
+                    np.mean(
+                        person[:, 1]
+                    )
+                )
+
+                ##################################################
+                # 6-D TimeSformer IMU
+                ##################################################
+
+                imu_features = (
+                    self.predict_human_imu()
+                )
+
+                ##################################################
+                # 1020-D MotionBERT
+                ##################################################
+
+                motionbert_features = (
+                    self.predict_motionbert()
+                )
+
+                ##################################################
+                # 1029-D human feature vector
+                #
+                # 3 position
+                # + 6 IMU
+                # + 1020 MotionBERT
+                ##################################################
+
+                human_features = np.concatenate(
+                    [
+
+                        np.array(
+                            [
+                                cx,
+                                cy,
+                                1.0
+                            ],
+                            dtype=np.float32
+                        ),
+
+                        imu_features,
+
+                        motionbert_features
+
+                    ]
+                ).astype(
+                    np.float32
+                )
+
+                ##################################################
+                # Human node
+                ##################################################
+
+                human_nodes.append({
+
+                    "position": [
+                        cx,
+                        cy
+                    ],
+
+                    "features":
+                        human_features.tolist(),
+
+                    "imu":
+                        imu_features.tolist(),
+
+                    "motionbert":
+                        motionbert_features.tolist()
+
+                })
 
         ##################################################
-        # Graph
+        # Graph Builder
         ##################################################
 
         graph_state = build_graph(
+
             robot_node,
+
             target_node,
+
             obstacle_nodes,
+
             human_nodes
+
         )
 
         ##################################################
-        # Enrich State Space With Human IMU Features
+        # Graph Builder compatibility
         ##################################################
 
-        if isinstance(graph_state, dict):
+        if isinstance(
+            graph_state,
+            dict
+        ):
 
-            graph_state["human_imu"] = (
-                imu_features.tolist()
-            )
+            graph_state[
+                "human_detected"
+            ] = human_detected
 
-        else:
-
-            graph_state = np.concatenate([
-                np.asarray(
-                    graph_state,
-                    dtype=np.float32
-                ).reshape(-1),
-                imu_features
-            ])
-
-        return graph_state, min_obstacle_distance
+        return (
+            graph_state,
+            min_obstacle_distance
+        )
 
     ##################################################
-    # Get Current State
+    # Get State
     ##################################################
 
     def getState(self, scan):
 
         done = False
-
         arrive = False
 
-        ##################################################
-        # Build Graph
-        ##################################################
-
-        graph_state, min_obstacle_distance = self.build_state_graph(
+        (
+            graph_state,
+            min_obstacle_distance
+        ) = self.build_state_graph(
             scan
         )
 
-        ##################################################
-        # Distance To Goal
-        ##################################################
-
         current_distance = math.hypot(
-            self.goal_pose.position.x - self.robot_pose.position.x,
-            self.goal_pose.position.y - self.robot_pose.position.y
+
+            self.goal_pose.position.x -
+            self.robot_pose.position.x,
+
+            self.goal_pose.position.y -
+            self.robot_pose.position.y
+
         )
 
-        ##################################################
-        # Collision
-        ##################################################
-
         if min_obstacle_distance < 0.20:
+
             done = True
 
-        ##################################################
-        # Goal Reached
-        ##################################################
-
         if current_distance < self.goal_threshold:
-            arrive = True
 
-        ##################################################
-        # Timeout
-        ##################################################
+            arrive = True
 
         timeout = False
 
         if self.current_step >= self.max_steps:
+
             timeout = True
             done = True
 
-        ##################################################
-        # Return
-        ##################################################
-
         return (
+
             graph_state,
+
             current_distance,
+
             min_obstacle_distance,
+
             timeout,
+
             done,
+
             arrive
+
         )
 
     ##################################################
-    # Reward Function
+    # Reward
     ##################################################
 
-    def compute_reward(self,
-                       current_distance,
-                       target_reached,
-                       timeout,
-                       current_v,
-                       current_w,
-                       positive_similarity,
-                       negative_similarity,
-                       human_detected):
+    def compute_reward(
+            self,
+            current_distance,
+            target_reached,
+            timeout,
+            current_v,
+            current_w,
+            positive_similarity,
+            negative_similarity,
+            human_detected
+    ):
 
-        ##################################################
-        # Goal Reward
-        ##################################################
-
-        r_goal = self.Rg if target_reached else 0.0
-
-        ##################################################
-        # Progress Reward
-        ##################################################
-
-        r_progress = self.lambda_p * (
-            self.previous_distance - current_distance
+        r_goal = (
+            self.Rg
+            if target_reached
+            else 0.0
         )
 
-        ##################################################
-        # Failure Reward
-        ##################################################
-
-        r_failure = -self.Rf if timeout else 0.0
-
-        ##################################################
-        # Damage Reward
-        ##################################################
-
-        r_damage = -self.lambda_d * (
-            abs(current_v - self.previous_linear_velocity) +
-            abs(current_w - self.previous_angular_velocity)
+        r_progress = (
+            self.lambda_p *
+            (
+                self.previous_distance -
+                current_distance
+            )
         )
 
-        ##################################################
-        # Social Reward
-        ##################################################
-
-        r_social = self.lambda_s * (
-            positive_similarity - negative_similarity
+        r_failure = (
+            -self.Rf
+            if timeout
+            else 0.0
         )
 
-        ##################################################
-        # Human Indicator
-        ##################################################
+        r_damage = (
+            -self.lambda_d *
+            (
+                abs(
+                    current_v -
+                    self.previous_linear_velocity
+                )
+                +
+                abs(
+                    current_w -
+                    self.previous_angular_velocity
+                )
+            )
+        )
 
-        delta = 1 if human_detected else 0
+        r_social = (
+            self.lambda_s *
+            (
+                positive_similarity -
+                negative_similarity
+            )
+        )
 
-        ##################################################
-        # Global Reward
-        ##################################################
+        delta = (
+            1
+            if human_detected
+            else 0
+        )
 
         reward = (
+
             r_goal +
             r_progress +
             r_failure +
             r_damage +
             delta * r_social
+
         )
 
-        ##################################################
-        # Update Previous Values
-        ##################################################
+        self.previous_distance = (
+            current_distance
+        )
 
-        self.previous_distance = current_distance
+        self.previous_linear_velocity = (
+            current_v
+        )
 
-        self.previous_linear_velocity = current_v
-
-        self.previous_angular_velocity = current_w
+        self.previous_angular_velocity = (
+            current_w
+        )
 
         return reward
 
     ##################################################
-    # Generate Training / Testing Goal
+    # Generate Goal
     ##################################################
 
     def generate_goal(self):
 
-        ##################################################
-        # Remove Previous Goal
-        ##################################################
-
         try:
-            self.delete_goal("Target")
+
+            self.delete_goal(
+                "Target"
+            )
+
         except:
+
             pass
 
-        ##################################################
-        # Build 64 Intelligent Targets
-        ##################################################
+        if len(
+            self.training_targets
+        ) == 0:
 
-        if len(self.training_targets) == 0:
-            for block_x in [-8, -4, 0, 4]:
-                for block_y in [-8, -4, 0, 4]:
+            for block_x in [
+                -8, -4, 0, 4
+            ]:
+
+                for block_y in [
+                    -8, -4, 0, 4
+                ]:
+
                     self.training_targets.extend([
-                        (block_x + 1.0, block_y + 1.0),
-                        (block_x + 3.0, block_y + 1.0),
-                        (block_x + 1.0, block_y + 3.0),
-                        (block_x + 3.0, block_y + 3.0)
-                    ])
 
-        ##################################################
-        # Training
-        ##################################################
+                        (
+                            block_x + 1.0,
+                            block_y + 1.0
+                        ),
+
+                        (
+                            block_x + 3.0,
+                            block_y + 1.0
+                        ),
+
+                        (
+                            block_x + 1.0,
+                            block_y + 3.0
+                        ),
+
+                        (
+                            block_x + 3.0,
+                            block_y + 3.0
+                        )
+
+                    ])
 
         if self.training:
 
             if self.last_target is None:
+
                 self.last_target = random.choice(
                     self.training_targets
                 )
+
             else:
+
                 MIN_DISTANCE = 4.0
+
                 candidates = []
 
                 for target in self.training_targets:
+
                     d = math.hypot(
-                        target[0] - self.last_target[0],
-                        target[1] - self.last_target[1]
+
+                        target[0] -
+                        self.last_target[0],
+
+                        target[1] -
+                        self.last_target[1]
+
                     )
 
                     if d >= MIN_DISTANCE:
-                        candidates.append(target)
+
+                        candidates.append(
+                            target
+                        )
 
                 if len(candidates) == 0:
-                    candidates = self.training_targets
+
+                    candidates = (
+                        self.training_targets
+                    )
 
                 self.last_target = random.choice(
                     candidates
@@ -1020,87 +1771,95 @@ class PepperEnvironment:
             x = self.last_target[0]
             y = self.last_target[1]
 
-        ##################################################
-        # Testing
-        ##################################################
-
         else:
 
             while True:
-                x = random.uniform(-8.0, 8.0)
-                y = random.uniform(-8.0, 8.0)
+
+                x = random.uniform(
+                    -8.0,
+                    8.0
+                )
+
+                y = random.uniform(
+                    -8.0,
+                    8.0
+                )
 
                 d = math.hypot(
-                    x - self.robot_pose.position.x,
-                    y - self.robot_pose.position.y
+
+                    x -
+                    self.robot_pose.position.x,
+
+                    y -
+                    self.robot_pose.position.y
+
                 )
 
                 if d >= 3.0:
+
                     break
 
-        ##################################################
-        # Goal Pose
-        ##################################################
-
         self.goal_pose.position.x = x
-
         self.goal_pose.position.y = y
-
         self.goal_pose.position.z = 0.0
 
-        ##################################################
-        # Spawn Goal
-        ##################################################
+        with open(
+            goal_model_dir,
+            "r"
+        ) as f:
 
-        with open(goal_model_dir, "r") as f:
             goal_xml = f.read()
 
         self.spawn_goal(
+
             "Target",
+
             goal_xml,
+
             "",
+
             self.goal_pose,
+
             "world"
+
         )
 
     ##################################################
-    # Environment Step
+    # Step
     ##################################################
 
     def step(self, action):
 
-        ##################################################
-        # Execute PPO Action
-        ##################################################
+        self.linear_velocity = float(
+            action[0]
+        )
 
-        self.linear_velocity = float(action[0])
-
-        self.angular_velocity = float(action[1])
+        self.angular_velocity = float(
+            action[1]
+        )
 
         cmd = Twist()
 
-        cmd.linear.x = self.linear_velocity
+        cmd.linear.x = (
+            self.linear_velocity
+        )
 
-        cmd.angular.z = self.angular_velocity
+        cmd.angular.z = (
+            self.angular_velocity
+        )
 
-        self.cmd_pub.publish(cmd)
+        self.cmd_pub.publish(
+            cmd
+        )
 
         rospy.sleep(0.10)
 
         self.current_step += 1
 
-        ##################################################
-        # Read Sensors
-        ##################################################
-
         scan = rospy.wait_for_message(
             "/scan",
             LaserScan
         )
-
-        ##################################################
-        # Build Current State
-        ##################################################
 
         (
             graph_state,
@@ -1109,11 +1868,9 @@ class PepperEnvironment:
             timeout,
             done,
             arrive
-        ) = self.getState(scan)
-
-        ##################################################
-        # Social Similarity
-        ##################################################
+        ) = self.getState(
+            scan
+        )
 
         (
             positive_similarity,
@@ -1121,81 +1878,91 @@ class PepperEnvironment:
             human_detected
         ) = self.compute_social_similarity()
 
-        ##################################################
-        # Compute Reward
-        ##################################################
-
         reward = self.compute_reward(
+
             current_distance,
+
             arrive,
+
             timeout,
+
             self.linear_velocity,
+
             self.angular_velocity,
+
             positive_similarity,
+
             negative_similarity,
+
             human_detected
+
         )
 
-        ##################################################
-        # Stop Robot if Episode Finished
-        ##################################################
-
         if done:
-            stop = Twist()
-            self.cmd_pub.publish(stop)
 
-        ##################################################
-        # Additional Information
-        ##################################################
+            stop = Twist()
+
+            self.cmd_pub.publish(
+                stop
+            )
 
         info = {
-            "goal_distance": current_distance,
-            "closest_obstacle": min_obstacle_distance,
-            "positive_similarity": positive_similarity,
-            "negative_similarity": negative_similarity,
-            "human_detected": human_detected,
-            "target_reached": arrive,
-            "timeout": timeout,
-            "step": self.current_step
+
+            "goal_distance":
+                current_distance,
+
+            "closest_obstacle":
+                min_obstacle_distance,
+
+            "positive_similarity":
+                positive_similarity,
+
+            "negative_similarity":
+                negative_similarity,
+
+            "human_detected":
+                human_detected,
+
+            "target_reached":
+                arrive,
+
+            "timeout":
+                timeout,
+
+            "step":
+                self.current_step
+
         }
 
-        ##################################################
-        # Return
-        ##################################################
-
         return (
+
             graph_state,
+
             reward,
+
             done,
+
             arrive,
+
             info
+
         )
 
     ##################################################
-    # Reset Environment
+    # Reset
     ##################################################
 
     def reset(self):
 
-        ##################################################
-        # Stop Pepper
-        ##################################################
-
         stop = Twist()
 
-        self.cmd_pub.publish(stop)
+        self.cmd_pub.publish(
+            stop
+        )
 
         rospy.sleep(0.5)
 
-        ##################################################
-        # Reset Gazebo
-        ##################################################
-
         self.reset_world()
-
-        ##################################################
-        # Reset Episode Variables
-        ##################################################
 
         self.current_step = 0
 
@@ -1207,37 +1974,18 @@ class PepperEnvironment:
 
         self.previous_distance = 0.0
 
-        ##################################################
-        # Clear Video Buffer
-        ##################################################
-
         self.video_buffer.clear()
-
-        ##################################################
-        # Generate New Goal
-        ##################################################
 
         self.generate_goal()
 
-        ##################################################
-        # Wait Until Camera Ready
-        ##################################################
-
         while self.current_frame is None:
-            rospy.sleep(0.05)
 
-        ##################################################
-        # Read Initial Laser Scan
-        ##################################################
+            rospy.sleep(0.05)
 
         scan = rospy.wait_for_message(
             "/scan",
             LaserScan
         )
-
-        ##################################################
-        # Initial Graph State
-        ##################################################
 
         (
             graph_state,
@@ -1246,16 +1994,13 @@ class PepperEnvironment:
             _,
             _,
             _
-        ) = self.getState(scan)
+        ) = self.getState(
+            scan
+        )
 
-        ##################################################
-        # Initialize Previous Distance
-        ##################################################
-
-        self.previous_distance = current_distance
-
-        ##################################################
-        # Return Initial State
-        ##################################################
+        self.previous_distance = (
+            current_distance
+        )
 
         return graph_state
+
