@@ -4,6 +4,22 @@
 # environment.py
 ##################################################
 
+##################################################
+##### Guidance for MotionBERT #####
+
+# MotionBERT files required by this code are organized as follows:
+# infer_wild.py is the official inference script used to convert the extracted
+# 2D human pose sequence into a 3D pose sequence. configs/pose3d/MB_ft_h36m.yaml
+# defines the MotionBERT model and inference configuration used by the script.
+# lib/ contains the complete core MotionBERT library required by the inference
+# pipeline, while params/ contains the framework parameters used by its model
+# and processing components. checkpoint/pose3d/FT_MB_release_MB_ft_h36m/
+# best_epoch.bin is the pretrained MotionBERT checkpoint loaded to perform
+# inference with the specified configuration. Finally, requirements.txt lists
+# the Python dependencies required to run these MotionBERT components.
+
+##################################################
+
 import os
 import cv2
 import json
