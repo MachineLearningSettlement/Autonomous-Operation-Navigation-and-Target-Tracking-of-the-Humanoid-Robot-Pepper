@@ -15,7 +15,6 @@ import rospy
 ##################################################
 
 from environment import PepperEnvironment
-from graph_builder import GraphBuilder
 from gnn import GraphSAGE
 from ppo import PPO
 from ctal import CTAL
@@ -118,12 +117,6 @@ environment = PepperEnvironment(
 )
 
 ##################################################
-# Graph Builder
-##################################################
-
-graph_builder = GraphBuilder()
-
-##################################################
 # Pretrained GraphSAGE
 ##################################################
 
@@ -192,8 +185,6 @@ ctal = CTAL(
 trainer = Trainer(
 
     env=environment,
-
-    graph_builder=graph_builder,
 
     gnn=gnn,
 
