@@ -1,5 +1,5 @@
 """
-Neuro-Symbolic Pepper Architecture — Complete Technical Blueprint
+
 
 Flow:
 User -> post-trained Gemini -> candidate orchestration
@@ -13,7 +13,7 @@ The KG schema is initialized before operation; dynamic scene facts are
 populated during operation from perception and computational validators.
 
 Gemini/YOLO/IK/ROS/NAOqi calls are represented as integration interfaces.
-Replace the blueprint adapters with the concrete deployed APIs.
+
 """
 
 from __future__ import annotations
