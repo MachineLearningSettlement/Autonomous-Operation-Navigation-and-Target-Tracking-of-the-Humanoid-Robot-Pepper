@@ -151,7 +151,7 @@ ROBOT_ARCHITECTURE = {
 # Old data:
 #     prompt + output
 #
-# The output identifies the normal technical models/actions used in the
+# The output identifies the normal technical models used in the
 # robot environment.
 #
 # Purpose:
@@ -164,22 +164,16 @@ OLD_TASKS: List[Dict[str, Any]] = [
         "id": "old_001",
         "prompt": "Recognize the person in front of the robot.",
         "output": {
-            "models": ["ResNet", "Dlib"],
-            "actions": [
-                "visual feature extraction",
-                "face recognition",
-            ],
+            "models": ["ResNet", "Dlib"]
+            
         },
     },
     {
         "id": "old_002",
         "prompt": "Detect the object visible in the camera image.",
         "output": {
-            "models": ["YOLO"],
-            "actions": [
-                "object detection",
-                "object labeling",
-            ],
+            "models": ["YOLO"]
+           
         },
     },
     {
@@ -189,11 +183,7 @@ OLD_TASKS: List[Dict[str, Any]] = [
             "models": [
                 "Speech Recognition",
                 "Gemini 1.5 Flash",
-            ],
-            "actions": [
-                "speech-to-text",
-                "language understanding",
-                "intent interpretation",
+            ]
             ],
         },
     },
@@ -201,20 +191,15 @@ OLD_TASKS: List[Dict[str, Any]] = [
         "id": "old_004",
         "prompt": "Estimate the depth of a detected object.",
         "output": {
-            "models": ["MiDaS"],
-            "actions": [
-                "depth estimation",
-            ],
+            "models": ["MiDaS"]
+            
         },
     },
     {
         "id": "old_005",
         "prompt": "Convert an image target coordinate into a robot coordinate.",
         "output": {
-            "models": ["Coordinate Transformation"],
-            "actions": [
-                "coordinate conversion",
-                "robot-frame localization",
+            "models": ["Coordinate Transformation"]
             ],
         },
     },
@@ -222,10 +207,7 @@ OLD_TASKS: List[Dict[str, Any]] = [
         "id": "old_006",
         "prompt": "Compute the robot arm configuration required to reach a target.",
         "output": {
-            "models": ["Inverse Kinematics"],
-            "actions": [
-                "inverse kinematics",
-                "arm configuration",
+            "models": ["Inverse Kinematics"]
             ],
         },
     },
@@ -236,12 +218,7 @@ OLD_TASKS: List[Dict[str, Any]] = [
             "models": [
                 "Knowledge Graph",
                 "Gemini 1.5 Flash",
-            ],
-            "actions": [
-                "knowledge retrieval",
-                "reasoning",
-                "action selection",
-            ],
+            ]
         },
     },
     {
@@ -251,11 +228,7 @@ OLD_TASKS: List[Dict[str, Any]] = [
             "models": [
                 "Gemini 1.5 Flash",
                 "TTS",
-            ],
-            "actions": [
-                "language generation",
-                "text-to-speech",
-            ],
+            ]
         },
     },
 ]
