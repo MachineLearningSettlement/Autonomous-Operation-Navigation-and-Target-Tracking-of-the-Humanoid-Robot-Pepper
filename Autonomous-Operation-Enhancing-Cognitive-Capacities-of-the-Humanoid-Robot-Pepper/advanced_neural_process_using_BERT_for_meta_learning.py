@@ -982,7 +982,7 @@ for epoch in range(
 
 
 # ============================================================
-# 16. SAVE TRAINED WEIGHTS
+# 16. SAVE TRAINED WEIGHTS FOR BOTH NP & BERT
 # ============================================================
 
 torch.save(
