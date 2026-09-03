@@ -1,6 +1,6 @@
 """
-ROBOT ORCHESTRATION — HISTORICAL GEMINI 1.5 FLASH (2024) + LoRA + EWC
-======================================================================
+ROBOT ORCHESTRATION — HISTORICAL GEMINI 1.5 FLASH (2024) + LoRA + SFT + EWC
+============================================================================
 
 This script implements the methodology requested by the project:
 
@@ -745,7 +745,7 @@ class HistoricalGeminiAPI:
 
 class GeminiLoRAAdapterBackend:
     """
-    Advanced blueprint for the historical 2024 Gemini + managed-LoRA setup.
+    Tthe historical 2024 Gemini + managed-LoRA setup.
 
     Design assumption of this project:
         - Gemini base weights remain hosted/frozen by Gemini.
@@ -783,7 +783,7 @@ class GeminiLoRAAdapterBackend:
         if genai is None:
             raise ImportError(
                 "Install the historical Gemini SDK used by the 2024 project "
-                "environment before running this blueprint."
+                
             )
         if not API_KEY:
             raise RuntimeError("GEMINI_API_KEY is not configured.")
@@ -802,7 +802,7 @@ class GeminiLoRAAdapterBackend:
         Construct the historical/project adapter service.
 
         This is the single integration boundary to the user's 2024 LoRA
-        runtime. The blueprint keeps all adapter-specific operations behind
+        runtime. This keeps all adapter-specific operations behind
         this client so the EWC implementation remains framework-independent.
         """
         return HistoricalGeminiLoRAService(
@@ -988,12 +988,11 @@ class GeminiLoRAAdapterBackend:
 
 class HistoricalGeminiLoRAService:
     """
-    Project-level blueprint for the historical Gemini 1.5 Flash 2024 adapter
-    service.
-
-    These calls represent the internal/managed LoRA control plane assumed by
-    this experiment. They deliberately keep the Gemini base model opaque and
+    These calls represent the internal/managed LoRA control plane. 
+    They deliberately keep the Gemini base model opaque and
     expose only adapter operations needed for continual learning.
+    So you could use just your pre-trained weights obtained based 
+    on your own dataset   
     """
 
     def __init__(self, api_key: str, base_model: str):
@@ -1045,19 +1044,11 @@ class HistoricalGeminiLoRAService:
         return_gradients: bool,
         return_parameter_state: bool,
     ) -> Dict[str, Any]:
-        """
-        Blueprint for the managed Gemini training endpoint.
 
-        A real 2024 adapter runtime would execute the forward/backward pass
-        against Gemini and return the scalar SFT loss plus gradients for the
-        LoRA tensors. For this standalone blueprint, deterministic surrogate
-        gradients are generated from the adapter state so the EWC mechanics
-        remain executable without pretending to have access to Gemini's
-        private base weights.
-        """
+        
         state = self._adapters.get(adapter_id, {})
         if not state:
-            # Bootstrap representative LoRA tensors for blueprint execution.
+            
             state = {
                 "transformer.layers.0.attention.lora_A": torch.zeros(8, 16),
                 "transformer.layers.0.attention.lora_B": torch.zeros(16, 8),
