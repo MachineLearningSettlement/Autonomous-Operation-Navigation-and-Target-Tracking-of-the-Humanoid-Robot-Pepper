@@ -29,7 +29,7 @@
 #        │ .
 #        │ .
 #        │
-#        └── additional task natures ( we used more than 15 task natures)
+#        └── additional task natures (we used more than 15 task natures)
 #               ├── task_1
 #               ├── task_2
 #               └── ...
@@ -141,19 +141,19 @@ meta_training_tasks = {
         "task_1": {
             "prompt": "Detect objects in front of the robot",
             "models": ["YOLO"],
-            "actions": ["Capture image", "Detect objects"]
+            "actions": ["Capture image", "Detect objects", "other actions"]
         },
 
         "task_2": {
             "prompt": "Recognize the person in front of the robot",
             "models": ["ResNet", "SVM", "Dlib"],
-            "actions": ["Capture image", "Detect face", "Recognize person"]
+            "actions": ["Capture image", "Detect face", "Recognize person", "other actions"]
         },
 
         "task_3": {
             "prompt": "Identify the bottle on the table",
             "models": ["YOLO"],
-            "actions": ["Detect bottle", "Recognize bottle"]
+            "actions": ["Detect bottle", "Recognize bottle", "other actions"]
         }
 
         # ... many more perception tasks
@@ -174,7 +174,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to table"
+                "Navigate to table", "other actions"
             ]
         },
 
@@ -192,7 +192,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to person"
+                "Navigate to person", "other actions"
             ]
         },
 
@@ -210,7 +210,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to object"
+                "Navigate to object", "other actions"
             ]
         }
 
@@ -233,7 +233,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Grasp bottle"
+                "Grasp bottle", "other actions"
             ]
         },
 
@@ -251,7 +251,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Grasp object"
+                "Grasp object", "other actions"
             ]
         }
 
@@ -271,7 +271,7 @@ meta_training_tasks = {
             "actions": [
                 "Understand request",
                 "Generate response",
-                "Speak"
+                "Speak", "other actions"
             ]
         },
 
@@ -285,14 +285,14 @@ meta_training_tasks = {
             "actions": [
                 "Understand speech",
                 "Generate response",
-                "Speak"
+                "Speak", "other actions"
             ]
         }
 
         # ... many more human-robot interaction tasks
     }
 
-    # ... additional task natures ( we used more than 15 task natures)
+    # ... additional task natures (we used more than 15 task natures)
 }
 
 
