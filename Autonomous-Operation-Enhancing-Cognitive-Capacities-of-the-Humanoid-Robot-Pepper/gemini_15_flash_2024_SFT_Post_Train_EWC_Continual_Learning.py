@@ -1,5 +1,5 @@
 """
-ROBOT ORCHESTRATION — HISTORICAL GEMINI 1.5 FLASH (2024) + LoRA + EWC
+ROBOT ORCHESTRATION — HISTORICAL GEMINI 1.5 FLASH (2024) + LoRA + SFT+ EWC
 =========================================================================
 
 This script implements the methodology requested by the project:
