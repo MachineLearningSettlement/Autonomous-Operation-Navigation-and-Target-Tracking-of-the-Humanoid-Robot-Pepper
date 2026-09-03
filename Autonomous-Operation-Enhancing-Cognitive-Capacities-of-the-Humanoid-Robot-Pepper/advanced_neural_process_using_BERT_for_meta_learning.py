@@ -141,19 +141,19 @@ meta_training_tasks = {
         "task_1": {
             "prompt": "Detect objects in front of the robot",
             "models": ["YOLO"],
-            "actions": ["Capture image", "Detect objects"]
+            "actions": ["Capture image", "Detect objects", "other related actions"]
         },
 
         "task_2": {
             "prompt": "Recognize the person in front of the robot",
             "models": ["ResNet", "SVM", "Dlib"],
-            "actions": ["Capture image", "Detect face", "Recognize person"]
+            "actions": ["Capture image", "Detect face", "Recognize person", "other related actions"]
         },
 
         "task_3": {
             "prompt": "Identify the bottle on the table",
             "models": ["YOLO"],
-            "actions": ["Detect bottle", "Recognize bottle"]
+            "actions": ["Detect bottle", "Recognize bottle", "other related actions"]
         }
 
         # ... many more perception tasks
@@ -167,14 +167,14 @@ meta_training_tasks = {
             "models": [
                 "MiDaS",
                 "Coordinate Transformation",
-                "Inverse Kinematics"
+                "Inverse Kinematics", "other related actions"
             ],
             "actions": [
                 "Locate table",
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to table"
+                "Navigate to table", "other related actions"
             ]
         },
 
@@ -184,7 +184,7 @@ meta_training_tasks = {
                 "YOLO",
                 "MiDaS",
                 "Coordinate Transformation",
-                "Inverse Kinematics"
+                "Inverse Kinematics", "other related actions"
             ],
             "actions": [
                 "Detect person",
@@ -192,7 +192,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to person"
+                "Navigate to person", "other related actions"
             ]
         },
 
@@ -210,7 +210,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Navigate to object"
+                "Navigate to object", "other related actions"
             ]
         }
 
@@ -233,7 +233,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Grasp bottle"
+                "Grasp bottle", "other related actions"
             ]
         },
 
@@ -251,7 +251,7 @@ meta_training_tasks = {
                 "Estimate depth",
                 "Transfer coordinates",
                 "Solve inverse kinematics",
-                "Grasp object"
+                "Grasp object", "other related actions"
             ]
         }
 
@@ -271,7 +271,7 @@ meta_training_tasks = {
             "actions": [
                 "Understand request",
                 "Generate response",
-                "Speak"
+                "Speak", "other related actions"
             ]
         },
 
@@ -285,7 +285,7 @@ meta_training_tasks = {
             "actions": [
                 "Understand speech",
                 "Generate response",
-                "Speak"
+                "Speak", "other related actions"
             ]
         }
 
