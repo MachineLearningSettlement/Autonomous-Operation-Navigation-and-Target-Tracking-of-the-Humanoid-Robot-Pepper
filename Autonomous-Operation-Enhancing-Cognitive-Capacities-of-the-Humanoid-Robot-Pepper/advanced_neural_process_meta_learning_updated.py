@@ -1029,9 +1029,10 @@ print(
 # ============================================================
 
 # new_task_prompt:
-#
-# A completely NEW composed task.
-#
+############################################
+# A completely NEW composed task: {complexed request contains combination of the previous meta-learning tasks,
+# something like "serach on a read cup on the table and give it to me, if you don't find it get back to me and tell me that"}                   
+############################################
 # It was NOT included in meta_training_tasks.
 #
 # It can combine capabilities from different task natures.
