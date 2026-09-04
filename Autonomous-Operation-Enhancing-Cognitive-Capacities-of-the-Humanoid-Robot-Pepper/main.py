@@ -1,6 +1,6 @@
 """
 INTEGRATED PEPPER INTELLIGENT ORCHESTRATION SYSTEM
-===================================================
+==================================================
 
 Pipeline implemented exactly as requested:
 
