@@ -1,6 +1,6 @@
 import sys
 from naoqi import ALProxy
-import time  # Pour ajouter un délai entre les captures d'images
+import time  # Pour ajouter un dÃ©lai entre les captures d'images
 
 def set_head_position(motion_proxy, head_yaw, head_pitch):
     """Set the head position of Pepper."""
@@ -10,33 +10,33 @@ def set_head_position(motion_proxy, head_yaw, head_pitch):
 
 def capture_image(ip, port):
     try:
-        # Créer un proxy pour le service ALMotion
+        # CrÃ©er un proxy pour le service ALMotion
         motion_proxy = ALProxy("ALMotion", ip, port)
 
         # Set the head position before capturing the image
         set_head_position(motion_proxy, -0.0813, 0.4418)   #angles = [-0.0337, 0.4387]  # [HeadYaw, HeadPitch]
 
 
-        # Créer un proxy pour le service ALVideoDevice
+        # CrÃ©er un proxy pour le service ALVideoDevice
         video_proxy = ALProxy("ALVideoDevice", ip, port)
 
-        # Configuration de la caméra
+        # Configuration de la camÃ©ra
         resolution = 2  # kVGA (640x480) pour l'image RGB
         color_space = 11  # RGB pour l'image couleur
         fps = 10
 
-        # Configuration de la caméra de profondeur
-        depth_resolution = 2  # Résolution pour l'image de profondeur
-        depth_color_space = 16  # Espace colorimétrique pour la profondeur (depuis la caméra ToF ou le capteur de profondeur)
+        # Configuration de la camÃ©ra de profondeur
+        depth_resolution = 2  # RÃ©solution pour l'image de profondeur
+        depth_color_space = 16  # Espace colorimÃ©trique pour la profondeur (depuis la camÃ©ra ToF ou le capteur de profondeur)
 
-        # Nom de la caméra (peut être "CameraTop" ou "CameraBottom")
-        camera_name_rgb = "CameraTop"  # Caméra RGB
-        camera_name_depth = "DepthCamera"  # Nom pour la caméra de profondeur
+        # Nom de la camÃ©ra (peut Ãªtre "CameraTop" ou "CameraBottom")
+        camera_name_rgb = "CameraTop"  # CamÃ©ra RGB
+        camera_name_depth = "DepthCamera"  # Nom pour la camÃ©ra de profondeur
 
-        # S'inscrire à la caméra RGB
+        # S'inscrire Ã  la camÃ©ra RGB
         video_client_rgb = video_proxy.subscribeCamera(camera_name_rgb, 0, resolution, color_space, fps)
 
-        # S'inscrire à la caméra de profondeur
+        # S'inscrire Ã  la camÃ©ra de profondeur
         video_client_depth = video_proxy.subscribeCamera(camera_name_depth, 0, depth_resolution, depth_color_space, fps)
 
         # Capturer une image RGB
@@ -44,16 +44,16 @@ def capture_image(ip, port):
         # Capturer une image de profondeur
         nao_image_depth = video_proxy.getImageRemote(video_client_depth)
 
-        # Désinscrire des caméras
+        # DÃ©sinscrire des camÃ©ras
         video_proxy.unsubscribe(video_client_rgb)
         video_proxy.unsubscribe(video_client_depth)
 
-        # Extraire les données de l'image RGB
+        # Extraire les donnÃ©es de l'image RGB
         image_width_rgb = nao_image_rgb[0]
         image_height_rgb = nao_image_rgb[1]
         image_array_rgb = nao_image_rgb[6]
 
-        # Extraire les données de l'image de profondeur
+        # Extraire les donnÃ©es de l'image de profondeur
         image_width_depth = nao_image_depth[0]
         image_height_depth = nao_image_depth[1]
         image_array_depth = nao_image_depth[6]
@@ -64,7 +64,7 @@ def capture_image(ip, port):
             f.write("P6\n{} {}\n255\n".format(image_width_rgb, image_height_rgb))
             f.write(image_array_rgb)
 
-        print("Image RGB enregistrée sous {}".format(rgb_filename))
+        print("Image RGB enregistrÃ©e sous {}".format(rgb_filename))
 
         # Enregistrer l'image de profondeur
         depth_filename = "pepper_depth_image.ppm"
@@ -72,7 +72,7 @@ def capture_image(ip, port):
             f.write("P5\n{} {}\n255\n".format(image_width_depth, image_height_depth))  # P5 pour image grayscale
             f.write(image_array_depth)
 
-        print("Image de profondeur enregistrée sous {}".format(depth_filename))
+        print("Image de profondeur enregistrÃ©e sous {}".format(depth_filename))
 
     except Exception as e:
         print("Erreur lors de la capture d'image : {}".format(e))
