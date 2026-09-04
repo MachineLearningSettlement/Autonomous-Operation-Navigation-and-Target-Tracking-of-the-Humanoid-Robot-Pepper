@@ -1,10 +1,10 @@
 """
 INTEGRATED PEPPER INTELLIGENT ORCHESTRATION SYSTEM
-===================================================
+==================================================
 
 Pipeline implemented exactly as requested:
 
-User composed task
+User composed task:
     -> Neural Process (pretrained meta-learned weights)
     -> predicted models + actions
     -> post-trained Gemini 1.5 Flash + final LoRA adapter
