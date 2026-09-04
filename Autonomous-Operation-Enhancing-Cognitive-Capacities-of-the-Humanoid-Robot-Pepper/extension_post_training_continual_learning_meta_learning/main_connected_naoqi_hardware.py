@@ -27,7 +27,7 @@ def read_from_file(filename):
         return None
 
 def synthesize_speech(text):
-    """Fait parler Pepper avec le texte donné et affiche 'je parle'."""
+    """Fait parler Pepper avec le texte donné et affiche 'je parle'"""
     try:
         print("Pepper says:", text)
         tts.post.say(text)  # Lancement du texte en mode asynchrone
