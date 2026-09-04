@@ -1,6 +1,6 @@
 Phase 1 develops an intelligent orchestration framework for the Pepper humanoid robot that combines meta-learning, continual learning, post-training, and 
 
-neuro-symbolic reasoning to enable adaptive and reliable task execution. A Neural Process acts as a meta-learned component to rapidly infer which perception, 
+neuro-symbolic AI reasoning to enable adaptive and reliable task execution. A Neural Process acts as a meta-learned component to rapidly infer which perception, 
 
 interaction, and manipulation capabilities are required from a new task, providing a structured representation that guides the orchestration process. On top of
 
