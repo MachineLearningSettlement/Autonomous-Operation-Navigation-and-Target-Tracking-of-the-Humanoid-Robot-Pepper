@@ -1,1 +1,27 @@
-The project develops an intelligent orchestration framework for the Pepper humanoid robot that combines meta-learning, continual learning, post-training, and neuro-symbolic reasoning to enable adaptive and reliable task execution. A Neural Process acts as a meta-learned component to rapidly infer which perception, interaction, and manipulation capabilities are required from a new task, providing a structured representation that guides the orchestration process. On top of this, two post-training stages with continual-learning mechanisms are used: Post-training 1 familiarizes the Gemini-based model with the robot’s tasks and overall architecture, establishing the foundational knowledge required to reason about the robotic system, while Elastic Weight Consolidation (EWC) is employed to preserve this acquired knowledge during further adaptation. Post-training 2 then specifically adapts the model to the robotic orchestration task, enabling it to transform the Neural Process output and task description into an appropriate sequence and organization of the required robot capabilities. This progressive training strategy allows the model to first acquire general knowledge about the robotic system and then specialize that knowledge for orchestration while reducing catastrophic forgetting. The objective is to move beyond a fixed pipeline toward a system capable of understanding diverse user tasks, dynamically selecting and ordering the appropriate robot capabilities, and adapting its orchestration to new situations. A neuro-symbolic layer and dynamic knowledge graph then validate the generated plan against explicit execution constraints, while the validated plan activates only the necessary modules, including human interaction, YOLO, Dlib, MiDaS, coordinate transformation, inverse kinematics, and real-world grasping through NAOqi. Overall, the work aims to combine the fast adaptation of meta-learning, progressive knowledge acquisition and specialization through the two post-training stages with EWC, and the reliability of symbolic reasoning to achieve more autonomous, flexible, and trustworthy robotic task orchestration.  
+The project develops an intelligent orchestration framework for the Pepper humanoid robot that combines meta-learning, continual learning, post-training, and 
+
+neuro-symbolic reasoning to enable adaptive and reliable task execution. A Neural Process acts as a meta-learned component to rapidly infer which perception, 
+
+interaction, and manipulation capabilities are required from a new task, providing a structured representation that guides the orchestration process. On top of
+
+this, two post-training stages with continual-learning mechanisms are used: Post-training 1 familiarizes the Gemini-based model with the robot’s tasks and 
+
+overall architecture, establishing the foundational knowledge required to reason about the robotic system, while Elastic Weight Consolidation (EWC) is employed
+
+to preserve this acquired knowledge during further adaptation. Post-training 2 then specifically adapts the model to the robotic orchestration task, enabling it 
+
+to transform the Neural Process output and task description into an appropriate sequence and organization of the required robot capabilities. This progressive 
+
+training strategy allows the model to first acquire general knowledge about the robotic system and then specialize that knowledge for orchestration while 
+
+reducing catastrophic forgetting. The objective is to move beyond a fixed pipeline toward a system capable of understanding diverse user tasks, dynamically 
+
+selecting and ordering the appropriate robot capabilities, and adapting its orchestration to new situations. A neuro-symbolic layer and dynamic knowledge graph 
+
+then validate the generated plan against explicit execution constraints, while the validated plan activates only the necessary modules, including human 
+
+interaction, YOLO, Dlib, MiDaS, coordinate transformation, inverse kinematics, and real-world grasping through NAOqi. Overall, the work aims to combine the fast 
+
+adaptation of meta-learning, progressive knowledge acquisition and specialization through the two post-training stages with EWC, and the reliability of symbolic 
+
+reasoning to achieve more autonomous, flexible, and trustworthy robotic task orchestration.  
