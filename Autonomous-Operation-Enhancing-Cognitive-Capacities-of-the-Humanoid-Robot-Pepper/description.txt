@@ -22,6 +22,6 @@ then validate the generated plan against explicit execution constraints, while t
 
 interaction, YOLO, Dlib, MiDaS, coordinate transformation, inverse kinematics, and real-world grasping through NAOqi. Overall, the work aims to combine the fast 
 
-adaptation of meta-learning, progressive knowledge acquisition and specialization through the two post-training stages with EWC, and the reliability of symbolic 
+adaptation of meta-learning, progressive knowledge acquisition and specialization through the two post-training stages with EWC and the reliability of symbolic 
 
 reasoning to achieve more autonomous, flexible, and trustworthy robotic task orchestration.  
