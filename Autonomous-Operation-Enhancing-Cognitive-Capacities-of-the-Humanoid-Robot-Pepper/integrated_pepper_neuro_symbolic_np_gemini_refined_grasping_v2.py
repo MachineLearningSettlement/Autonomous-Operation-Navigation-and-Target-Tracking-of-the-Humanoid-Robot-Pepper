@@ -778,14 +778,14 @@ class PepperGraspingBlock:
 
 
 def wait_for_grasping_completion() -> None:
-    """Hold execution and check external grasping_status.txt every 1 minute."""
+    """Hold execution and check external grasping_status.txt."""
     while True:
         if GRASPING_STATUS_FILE.exists():
             status = GRASPING_STATUS_FILE.read_text(encoding="utf-8").strip().lower()
             if status == "end grasping":
                 print("GRASPING COMPLETED -> continuing to the following block.")
                 return
-        print("GRASPING NOT COMPLETED -> process held; checking again in 1 minute.")
+        print("GRASPING NOT COMPLETED -> process held.")
         time.sleep(GRASPING_STATUS_POLL_INTERVAL)
 
 
