@@ -121,7 +121,6 @@ FACE_BASE = os.getenv("FACE_RECOG_BASE", str(BASE_DIR / "face_recog_base"))
 # =============================================================================
 
 def load_python_module(path: Path, module_name: str):
-    """Load a Python source file without executing its __main__ block."""
     if not path.exists():
         raise FileNotFoundError(f"Required source file not found: {path}")
     spec = importlib.util.spec_from_file_location(module_name, str(path))
