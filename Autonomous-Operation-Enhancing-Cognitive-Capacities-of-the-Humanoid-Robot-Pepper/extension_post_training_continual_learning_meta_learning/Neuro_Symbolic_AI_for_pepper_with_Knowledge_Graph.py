@@ -10,7 +10,7 @@ User -> post-trained Gemini -> candidate orchestration
      -> KG state update
 
 The KG schema is initialized before operation; dynamic scene facts are
-populated during operation from perception and computational validators.
+populated during operation from perception and computational validators
 
 Gemini/YOLO/IK/ROS/NAOqi calls are represented as integration interfaces.
 The implementation provides the neural-symbolic reasoning, grounding, validation, and replanning architecture.
